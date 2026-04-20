@@ -1,0 +1,35 @@
+# Git attributes for Memphis
+# Ensures consistent line endings and encoding across platforms
+
+# Auto detect text files and normalize line endings to LF
+* text=auto
+
+# Source code
+*.c text eol=lf
+*.h text eol=lf
+*.cmake text eol=lf
+CMakeLists.txt text eol=lf
+
+# Build files
+Makefile text eol=lf
+*.sh text eol=lf
+*.env text eol=lf
+
+# Documentation
+*.md text eol=lf
+*.txt text eol=lf
+
+# Config files
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.clang-format text eol=lf
+
+# Binary files
+*.a binary
+*.o binary
+*.so binary
+*.dylib binary
+*.dll binary
+
+# JSON (commonly edited)
+*.json text eol=lf
