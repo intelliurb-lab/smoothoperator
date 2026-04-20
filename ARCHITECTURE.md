@@ -6,11 +6,9 @@ SmoothOperator is a single-threaded event-driven daemon that bridges RabbitMQ an
 
 ```plantuml
 @startuml System Overview
-!define AWSPUML https://raw.githubusercontent.com/awslabs/aws-icons-for-plantuml/v14.0/dist
-!include AWSPUML/AWSCommon.puml
 
 package "Message Bus" {
-  component RabbitMQ as rabbitmq [
+  component RabbitMQ [
     RabbitMQ
     ----
     Exchange: radio.events
@@ -19,56 +17,56 @@ package "Message Bus" {
 }
 
 package "SmoothOperator" {
-  component Consumer as consumer [
+  component Consumer [
     RabbitMQ Consumer
     ----
-    - Listen for messages
-    - ACK/NACK handling
-    - Retry logic
+    Listen for messages
+    ACK/NACK handling
+    Retry logic
   ]
   
-  component Validator as validator [
+  component Validator [
     Message Validator
     ----
-    - JSON schema check
-    - Field validation
-    - Type checking
+    JSON schema check
+    Field validation
+    Type checking
   ]
   
-  component Router as router [
+  component Router [
     Event Router
     ----
-    - Route by event type
-    - Command generation
-    - Error handling
+    Route by event type
+    Command generation
+    Error handling
   ]
   
-  component Client as client [
+  component Client [
     Liquidsoap Client
     ----
-    - TCP socket mgmt
-    - Command sending
-    - Response parsing
+    TCP socket management
+    Command sending
+    Response parsing
   ]
 }
 
 package "Audio Server" {
-  component Liquidsoap as liquidsoap [
+  component Liquidsoap [
     Liquidsoap
     ----
     Port: 1234 (telnet)
-    - Stream playback
-    - Announcement queue
-    - Commands: next, shutdown
+    Stream playback
+    Announcement queue
+    Commands: next, shutdown
   ]
 }
 
-rabbitmq --> consumer: message\nevent
-consumer --> validator: parse JSON
-validator --> router: validate
-router --> client: send command
-client --> liquidsoap: TCP command
-liquidsoap --> consumer: ACK response
+RabbitMQ --> Consumer: message event
+Consumer --> Validator: parse JSON
+Validator --> Router: validate
+Router --> Client: send command
+Client --> Liquidsoap: TCP command
+Liquidsoap --> Consumer: ACK response
 
 @enduml
 ```
@@ -119,83 +117,68 @@ end
 
 ```plantuml
 @startuml Components
-package "SmoothOperator Core" {
-  component Main as main [
-    main.c
-    ----
-    Entry point
-    Signal handling
-    Privilege dropping
-    Lifecycle management
-  ]
-  
-  component Config as config [
-    config.c
-    ----
-    Environment variables
-    Validation
-    Defaults
-  ]
-  
-  component Logging as logging [
-    smoothoperator_logging.c
-    ----
-    JSON formatted logs
-    File I/O (O_NOFOLLOW)
-    Log levels
-  ]
-}
 
-package "Message Processing" {
-  component Message as message [
-    message.c
-    ----
-    JSON parsing
-    Schema validation
-    Getters for fields
-  ]
-  
-  component Consumer as consumer [
-    rabbitmq_consumer.c
-    ----
-    AMQP connection
-    Message consumption
-    ACK/NACK logic
-  ]
-}
+component Main [
+  main.c
+  ----
+  Entry point
+  Signal handling
+]
 
-package "Command Execution" {
-  component Router as router [
-    ls_controller.c
-    ----
-    Event routing
-    Command generation
-    Health tracking
-  ]
-  
-  component Client as client [
-    liquidsoap_client.c
-    ----
-    TCP socket
-    Command sending
-    Timeout handling
-  ]
-}
+component Config [
+  config.c
+  ----
+  Environment vars
+  Validation
+]
 
-main --> config: LoadConfig()
-main --> logging: InitLogging()
-main --> consumer: CreateConsumer()
+component Logging [
+  smoothoperator_logging.c
+  ----
+  JSON logs
+  File I/O
+]
 
-consumer --> Client: Setup RabbitMQ\nconnection
-consumer --> message: Parse messages
+component Message [
+  message.c
+  ----
+  JSON parsing
+  Schema validation
+]
 
-message --> router: HandleEvent()
-router --> client: SendCommand()
+component Consumer [
+  rabbitmq_consumer.c
+  ----
+  AMQP connection
+  Message consumption
+]
 
-config -.-> consumer: credentials
-config -.-> logging: log file path
-logging -.-> consumer: log messages
-logging -.-> router: log events
+component Router [
+  ls_controller.c
+  ----
+  Event routing
+  Command generation
+]
+
+component Client [
+  liquidsoap_client.c
+  ----
+  TCP socket
+  Command sending
+]
+
+Main --> Config: LoadConfig()
+Main --> Logging: InitLogging()
+Main --> Consumer: CreateConsumer()
+
+Consumer --> Message: Parse messages
+Message --> Router: HandleEvent()
+Router --> Client: SendCommand()
+
+Config -.-> Consumer: credentials
+Config -.-> Logging: log path
+Logging -.-> Consumer: log messages
+Logging -.-> Router: log events
 
 @enduml
 ```
@@ -234,26 +217,24 @@ typedef struct {
 
 ```plantuml
 @startuml Event Routing
-state EventType {
-  [*] --> CheckEvent
-  CheckEvent --> ControlSkip: control.skip
-  CheckEvent --> ControlShutdown: control.shutdown
-  CheckEvent --> AnnouncementPush: announcement.push
-  CheckEvent --> InvalidEvent: unknown
-  
-  ControlSkip --> GenerateCmd1: Generate "next"
-  ControlShutdown --> GenerateCmd2: Generate "shutdown"
-  AnnouncementPush --> GenerateCmd3: Extract filepath\nGenerate "announcements.push /path"
-  InvalidEvent --> ErrorPath: Return RESULT_INVALID
-  
-  GenerateCmd1 --> ValidateCmd: Validate command
-  GenerateCmd2 --> ValidateCmd
-  GenerateCmd3 --> ValidateCmd
-  
-  ValidateCmd --> SendSocket: Send to Liquidsoap
-  SendSocket --> [*]: ACK/NACK
-  ErrorPath --> [*]: Error
-}
+
+[*] --> CheckEvent
+CheckEvent --> ControlSkip: control.skip
+CheckEvent --> ControlShutdown: control.shutdown
+CheckEvent --> AnnouncementPush: announcement.push
+CheckEvent --> InvalidEvent: unknown
+
+ControlSkip --> GenerateCmd: Generate "next"
+ControlShutdown --> GenerateCmd: Generate "shutdown"
+AnnouncementPush --> GenerateCmd: Extract filepath
+
+GenerateCmd --> ValidateCmd
+InvalidEvent --> ErrorPath
+
+ValidateCmd --> SendSocket: Send to Liquidsoap
+SendSocket --> [*]: ACK/NACK
+ErrorPath --> [*]: Error
+
 @enduml
 ```
 
@@ -261,106 +242,93 @@ state EventType {
 
 ```plantuml
 @startuml Deployment
-package "Production Environment" {
-  package "Load Balancer" {
-    component LB [
-      nginx / HAProxy
-      ----
-      Distributes RabbitMQ
-      connections
-    ]
-  }
-  
-  package "RabbitMQ Cluster" {
-    component RabbitMQ1 [
-      RabbitMQ Node 1
-      ----
-      Disk: radio.events
-      Queue: ls.commands
-    ]
-    component RabbitMQ2 [
-      RabbitMQ Node 2
-      ----
-      (replica)
-    ]
-    component RabbitMQ3 [
-      RabbitMQ Node 3
-      ----
-      (replica)
-    ]
-  }
-  
-  package "SmoothOperator Instances" {
-    component SO1 [
-      SmoothOperator #1
-      ----
-      Consumer 1
-    ]
-    component SO2 [
-      SmoothOperator #2
-      ----
-      Consumer 2
-    ]
-    component SO3 [
-      SmoothOperator #3
-      ----
-      Consumer 3
-    ]
-  }
-  
-  package "Liquidsoap Servers" {
-    component LS1 [
-      Liquidsoap Primary
-      ----
-      Port 1234 (telnet)
-    ]
-    component LS2 [
-      Liquidsoap Backup
-      ----
-      Port 1234 (telnet)
-    ]
-  }
-  
-  package "Monitoring" {
-    component Prometheus [
-      Prometheus
-      ----
-      Metrics collection
-    ]
-    component Grafana [
-      Grafana
-      ----
-      Dashboards
-    ]
-    component ELK [
-      ELK Stack
-      ----
-      Log aggregation
-    ]
-  }
-  
-  LB --> RabbitMQ1
-  LB --> RabbitMQ2
-  LB --> RabbitMQ3
-  
-  SO1 --> RabbitMQ1
-  SO2 --> RabbitMQ2
-  SO3 --> RabbitMQ3
-  
-  SO1 --> LS1
-  SO2 --> LS1
-  SO3 --> LS2
-  
-  SO1 -.-> Prometheus
-  SO2 -.-> Prometheus
-  SO3 -.-> Prometheus
-  
-  Prometheus --> Grafana
-  
-  SO1 -.-> ELK
-  SO2 -.-> ELK
-  SO3 -.-> ELK
+
+package "Load Balancer" {
+  component LB [
+    nginx / HAProxy
+    ----
+    Distributes RabbitMQ
+    connections
+  ]
 }
+
+package "RabbitMQ Cluster" {
+  component RabbitMQ1 [
+    RabbitMQ Node 1
+    ----
+    Primary
+  ]
+  component RabbitMQ2 [
+    RabbitMQ Node 2
+    ----
+    Replica
+  ]
+  component RabbitMQ3 [
+    RabbitMQ Node 3
+    ----
+    Replica
+  ]
+}
+
+package "SmoothOperator Instances" {
+  component SO1 [
+    Instance 1
+  ]
+  component SO2 [
+    Instance 2
+  ]
+  component SO3 [
+    Instance 3
+  ]
+}
+
+package "Liquidsoap Servers" {
+  component LS1 [
+    Liquidsoap Primary
+    ----
+    Port 1234
+  ]
+  component LS2 [
+    Liquidsoap Backup
+    ----
+    Port 1234
+  ]
+}
+
+package "Monitoring" {
+  component Prometheus [
+    Prometheus
+  ]
+  component Grafana [
+    Grafana
+  ]
+  component ELK [
+    ELK Stack
+  ]
+}
+
+LB --> RabbitMQ1
+LB --> RabbitMQ2
+LB --> RabbitMQ3
+
+SO1 --> RabbitMQ1
+SO2 --> RabbitMQ2
+SO3 --> RabbitMQ3
+
+SO1 --> LS1
+SO2 --> LS1
+SO3 --> LS2
+
+SO1 -.-> Prometheus
+SO2 -.-> Prometheus
+SO3 -.-> Prometheus
+
+Prometheus --> Grafana
+
+SO1 -.-> ELK
+SO2 -.-> ELK
+SO3 -.-> ELK
+
 @enduml
 ```
 

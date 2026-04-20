@@ -1,103 +1,49 @@
-# Contributing to Memphis
+# Contributing to SmoothOperator
 
-Thank you for your interest in contributing to Memphis! Here's how to get started.
+Thank you for your interest in contributing!
 
-## Code of Conduct
-
-Be respectful, inclusive, and constructive. We're building a friendly community.
-
-## Development Setup
+## Getting Started
 
 ```bash
-git clone https://github.com/intelliurb/smoothoperator.git
+git clone https://github.com/intelliurb-lab/smoothoperator.git
 cd smoothoperator
 
-# Install dependencies
-sudo apt-get install -y build-essential cmake librabbitmq-dev libjansson-dev libcunit1-dev
+# Ubuntu/Debian
+sudo apt-get install -y build-essential cmake pkg-config \
+  librabbitmq-dev libjansson-dev libcunit1-dev
 
-# Build
 make debug
-
-# Run tests
 make test
 ```
 
-## Making Changes
+## Workflow
 
-### 1. Fork & Branch
+1. Create a branch: `git checkout -b feature/your-feature`
+2. Make changes and test: `make test`
+3. Commit with clear messages: `git commit -m "feat: description"`
+4. Push and open a Pull Request
 
-```bash
-git checkout -b feature/your-feature
-```
+## Code Style
 
-### 2. Code Quality
+- Use `const` by default
+- Check return values
+- Free all allocations
+- Use safe string functions
+- Validate input
 
-Before committing:
-```bash
-make format     # Auto-format with clang-format
-make lint       # Check formatting
-make test       # Run all tests
-make coverage   # Verify coverage
-```
-
-### 3. Commit Message Style
-
-```
-feat: add TCP keepalive to liquidsoap client
-
-- Implement persistent connection in ls_send_command()
-- Add SO_KEEPALIVE socket option
-- Add 3 new tests
-
-Closes #123
-```
-
-**Format**: `type: subject`
-
-Types:
-- `feat:` — New feature
-- `fix:` — Bug fix
-- `docs:` — Documentation
-- `test:` — Tests
-- `refactor:` — Refactoring without behavior change
-- `perf:` — Performance improvement
-
-### 4. Push & Open PR
+## Testing
 
 ```bash
-git push origin feature/your-feature
+make test       # Run unit tests
+make debug      # Build with ASAN/UBSAN
+make format     # Auto-format code
+make lint       # Check style
 ```
 
-Then open a PR on GitHub with:
-- Clear title (same as commit message)
-- Description of what and why
-- Reference any related issues (#123)
+## Security
 
-## Testing Requirements
-
-All PRs must:
-- [ ] Pass `make test` (100%)
-- [ ] Pass `make lint` (code style)
-- [ ] Maintain or improve coverage
-- [ ] Include new tests for new features
-- [ ] Update docs if API changed
-
-## Documentation
-
-Update docs if you:
-- Change public API
-- Add new features
-- Fix significant bugs
-- Change architecture
-
-## License
-
-By contributing, you agree your code is under BSD 2-Clause License (see LICENSE).
-
-## Questions?
-
-- Open an issue for questions/discussions
+For security issues, email contact@intelliurb.com instead of opening a GitHub issue.
 
 ---
 
-Thank you for contributing! 🚀
+**Thank you for contributing!** 🚀

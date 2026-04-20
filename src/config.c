@@ -41,6 +41,21 @@ static bool get_config_bool(const char *key, bool default_val) {
   return default_val;
 }
 
+static ls_protocol_t get_config_proto(const char *key,
+                                      ls_protocol_t default_val) {
+  const char *val = getenv(key);
+  if (!val || !*val)
+    return default_val;
+  if (strcmp(val, "telnet") == 0)
+    return LS_PROTO_TELNET;
+  if (strcmp(val, "socket") == 0)
+    return LS_PROTO_SOCKET;
+  fprintf(stderr,
+          "ERROR: LIQUIDSOAP_PROTOCOL must be 'telnet' or 'socket', got '%s'\n",
+          val);
+  return (ls_protocol_t)-1;
+}
+
 config_t *config_load(const char *config_file) {
   (void)config_file;
 
@@ -62,8 +77,11 @@ config_t *config_load(const char *config_file) {
   cfg->rabbitmq_tls_client_key = get_config_string("RABBITMQ_TLS_CLIENT_KEY", NULL);
   cfg->rabbitmq_tls_verify_peer = get_config_bool("RABBITMQ_TLS_VERIFY_PEER", true);
 
+  cfg->liquidsoap_protocol =
+      get_config_proto("LIQUIDSOAP_PROTOCOL", LS_PROTO_TELNET);
   cfg->liquidsoap_host = get_config_string("LIQUIDSOAP_HOST", NULL);
   cfg->liquidsoap_port = get_config_uint16("LIQUIDSOAP_PORT", 0);
+  cfg->liquidsoap_socket_path = get_config_string("LIQUIDSOAP_SOCKET_PATH", NULL);
   cfg->liquidsoap_timeout_ms = get_config_uint32("LIQUIDSOAP_TIMEOUT_MS", 3000);
   cfg->liquidsoap_reconnect_max_delay_ms = get_config_uint32("LIQUIDSOAP_RECONNECT_MAX_DELAY_MS", 30000);
 
@@ -76,7 +94,8 @@ config_t *config_load(const char *config_file) {
 }
 
 bool config_is_valid(const config_t *cfg) {
-  if (cfg == NULL) return false;
+  if (cfg == NULL)
+    return false;
 
   if (cfg->rabbitmq_host == NULL || strlen(cfg->rabbitmq_host) == 0) {
     fprintf(stderr, "ERROR: RABBITMQ_HOST must be set\n");
@@ -94,14 +113,49 @@ bool config_is_valid(const config_t *cfg) {
     fprintf(stderr, "ERROR: RABBITMQ_PASS must be set and >= 12 chars\n");
     return false;
   }
-  if (cfg->liquidsoap_host == NULL || strlen(cfg->liquidsoap_host) == 0) {
-    fprintf(stderr, "ERROR: LIQUIDSOAP_HOST must be set\n");
+
+  if ((int)cfg->liquidsoap_protocol < 0) {
+    fprintf(stderr, "ERROR: LIQUIDSOAP_PROTOCOL parse failed\n");
     return false;
   }
-  if (cfg->liquidsoap_port == 0) {
-    fprintf(stderr, "ERROR: LIQUIDSOAP_PORT must be set (1-65535)\n");
-    return false;
+
+  if (cfg->liquidsoap_protocol == LS_PROTO_TELNET) {
+    if (cfg->liquidsoap_host == NULL || strlen(cfg->liquidsoap_host) == 0) {
+      fprintf(stderr, "ERROR: LIQUIDSOAP_HOST required for telnet protocol\n");
+      return false;
+    }
+    if (cfg->liquidsoap_port == 0) {
+      fprintf(stderr, "ERROR: LIQUIDSOAP_PORT required for telnet protocol\n");
+      return false;
+    }
+    if (cfg->liquidsoap_socket_path != NULL &&
+        strlen(cfg->liquidsoap_socket_path) > 0) {
+      fprintf(stderr,
+              "ERROR: cannot set LIQUIDSOAP_SOCKET_PATH with telnet protocol\n");
+      return false;
+    }
+  } else if (cfg->liquidsoap_protocol == LS_PROTO_SOCKET) {
+    if (cfg->liquidsoap_socket_path == NULL ||
+        strlen(cfg->liquidsoap_socket_path) == 0) {
+      fprintf(stderr,
+              "ERROR: LIQUIDSOAP_SOCKET_PATH required for socket protocol\n");
+      return false;
+    }
+    if (cfg->liquidsoap_socket_path[0] != '/') {
+      fprintf(stderr, "ERROR: LIQUIDSOAP_SOCKET_PATH must be absolute\n");
+      return false;
+    }
+    if (strlen(cfg->liquidsoap_socket_path) > 108) {
+      fprintf(stderr, "ERROR: LIQUIDSOAP_SOCKET_PATH exceeds max length 108\n");
+      return false;
+    }
+    if (cfg->liquidsoap_host != NULL && strlen(cfg->liquidsoap_host) > 0) {
+      fprintf(stderr,
+              "ERROR: cannot set LIQUIDSOAP_HOST with socket protocol\n");
+      return false;
+    }
   }
+
   if (cfg->log_file == NULL || strlen(cfg->log_file) == 0) {
     fprintf(stderr, "ERROR: LOG_FILE must be set\n");
     return false;
@@ -136,6 +190,8 @@ void config_free(config_t *cfg) {
   }
   if (cfg->liquidsoap_host)
     free(cfg->liquidsoap_host);
+  if (cfg->liquidsoap_socket_path)
+    free(cfg->liquidsoap_socket_path);
   if (cfg->log_file)
     free(cfg->log_file);
   if (cfg->log_level)

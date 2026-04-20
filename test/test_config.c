@@ -93,6 +93,97 @@ void test_is_valid_null(void) {
   CU_ASSERT_FALSE(config_is_valid(NULL));
 }
 
+/* Test: protocol telnet (default) */
+void test_protocol_telnet_default(void) {
+  setup_env_vars();
+  unsetenv("LIQUIDSOAP_PROTOCOL");
+  config_t *cfg = config_load(NULL);
+  CU_ASSERT_PTR_NOT_NULL(cfg);
+  CU_ASSERT_EQUAL(cfg->liquidsoap_protocol, LS_PROTO_TELNET);
+  config_free(cfg);
+}
+
+/* Test: protocol telnet explicit */
+void test_protocol_telnet_explicit(void) {
+  setup_env_vars();
+  setenv("LIQUIDSOAP_PROTOCOL", "telnet", 1);
+  config_t *cfg = config_load(NULL);
+  CU_ASSERT_PTR_NOT_NULL(cfg);
+  CU_ASSERT_EQUAL(cfg->liquidsoap_protocol, LS_PROTO_TELNET);
+  CU_ASSERT_TRUE(config_is_valid(cfg));
+  config_free(cfg);
+}
+
+/* Test: protocol socket */
+void test_protocol_socket(void) {
+  setup_env_vars();
+  setenv("LIQUIDSOAP_PROTOCOL", "socket", 1);
+  setenv("LIQUIDSOAP_SOCKET_PATH", "/var/run/liquidsoap/ls.sock", 1);
+  unsetenv("LIQUIDSOAP_HOST");
+  unsetenv("LIQUIDSOAP_PORT");
+  config_t *cfg = config_load(NULL);
+  CU_ASSERT_PTR_NOT_NULL(cfg);
+  CU_ASSERT_EQUAL(cfg->liquidsoap_protocol, LS_PROTO_SOCKET);
+  CU_ASSERT_STRING_EQUAL(cfg->liquidsoap_socket_path,
+                         "/var/run/liquidsoap/ls.sock");
+  CU_ASSERT_TRUE(config_is_valid(cfg));
+  config_free(cfg);
+}
+
+/* Test: socket protocol without path (invalid) */
+void test_protocol_socket_no_path(void) {
+  setup_env_vars();
+  setenv("LIQUIDSOAP_PROTOCOL", "socket", 1);
+  unsetenv("LIQUIDSOAP_SOCKET_PATH");
+  unsetenv("LIQUIDSOAP_HOST");
+  unsetenv("LIQUIDSOAP_PORT");
+  config_t *cfg = config_load(NULL);
+  CU_ASSERT_PTR_NOT_NULL(cfg);
+  CU_ASSERT_FALSE(config_is_valid(cfg));
+  config_free(cfg);
+}
+
+/* Test: socket path not absolute (invalid) */
+void test_protocol_socket_relative_path(void) {
+  setup_env_vars();
+  setenv("LIQUIDSOAP_PROTOCOL", "socket", 1);
+  setenv("LIQUIDSOAP_SOCKET_PATH", "relative/path.sock", 1);
+  unsetenv("LIQUIDSOAP_HOST");
+  unsetenv("LIQUIDSOAP_PORT");
+  config_t *cfg = config_load(NULL);
+  CU_ASSERT_PTR_NOT_NULL(cfg);
+  CU_ASSERT_FALSE(config_is_valid(cfg));
+  config_free(cfg);
+}
+
+/* Test: socket path too long (invalid) */
+void test_protocol_socket_path_too_long(void) {
+  setup_env_vars();
+  setenv("LIQUIDSOAP_PROTOCOL", "socket", 1);
+  char long_path[256];
+  memset(long_path, 'a', 200);
+  long_path[200] = '\0';
+  long_path[0] = '/';
+  setenv("LIQUIDSOAP_SOCKET_PATH", long_path, 1);
+  unsetenv("LIQUIDSOAP_HOST");
+  unsetenv("LIQUIDSOAP_PORT");
+  config_t *cfg = config_load(NULL);
+  CU_ASSERT_PTR_NOT_NULL(cfg);
+  CU_ASSERT_FALSE(config_is_valid(cfg));
+  config_free(cfg);
+}
+
+/* Test: telnet with socket path set (invalid) */
+void test_protocol_telnet_with_socket_path(void) {
+  setup_env_vars();
+  setenv("LIQUIDSOAP_PROTOCOL", "telnet", 1);
+  setenv("LIQUIDSOAP_SOCKET_PATH", "/tmp/ls.sock", 1);
+  config_t *cfg = config_load(NULL);
+  CU_ASSERT_PTR_NOT_NULL(cfg);
+  CU_ASSERT_FALSE(config_is_valid(cfg));
+  config_free(cfg);
+}
+
 /* Register test suite */
 CU_pSuite suite_config(void) {
   CU_pSuite pSuite = CU_add_suite("config", 0, 0);
@@ -107,6 +198,16 @@ CU_pSuite suite_config(void) {
   CU_add_test(pSuite, "log level ERROR", test_log_level_error);
   CU_add_test(pSuite, "log level FATAL", test_log_level_fatal);
   CU_add_test(pSuite, "is valid (NULL)", test_is_valid_null);
+  CU_add_test(pSuite, "protocol telnet default", test_protocol_telnet_default);
+  CU_add_test(pSuite, "protocol telnet explicit", test_protocol_telnet_explicit);
+  CU_add_test(pSuite, "protocol socket", test_protocol_socket);
+  CU_add_test(pSuite, "protocol socket no path", test_protocol_socket_no_path);
+  CU_add_test(pSuite, "protocol socket relative path",
+              test_protocol_socket_relative_path);
+  CU_add_test(pSuite, "protocol socket path too long",
+              test_protocol_socket_path_too_long);
+  CU_add_test(pSuite, "protocol telnet with socket path",
+              test_protocol_telnet_with_socket_path);
 
   return pSuite;
 }

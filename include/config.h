@@ -4,6 +4,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+typedef enum {
+  LS_PROTO_TELNET = 0,
+  LS_PROTO_SOCKET = 1
+} ls_protocol_t;
+
 typedef struct {
   char *rabbitmq_host;
   uint16_t rabbitmq_port;
@@ -16,8 +21,10 @@ typedef struct {
   char *rabbitmq_tls_client_key;
   bool rabbitmq_tls_verify_peer;
 
+  ls_protocol_t liquidsoap_protocol;
   char *liquidsoap_host;
   uint16_t liquidsoap_port;
+  char *liquidsoap_socket_path;
   uint32_t liquidsoap_timeout_ms;
   uint32_t liquidsoap_reconnect_max_delay_ms;
 

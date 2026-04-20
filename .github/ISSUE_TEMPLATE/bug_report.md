@@ -1,28 +1,31 @@
 ---
 name: Bug Report
-about: Report a bug
+about: Report a bug to help us improve SmoothOperator
 title: "[BUG] "
 labels: bug
+assignees: ''
+
 ---
 
 ## Description
-Brief description of the bug.
+<!-- A clear and concise description of what the bug is. -->
 
 ## Steps to Reproduce
-1. Step one
-2. Step two
-3. ...
+<!-- Steps to reproduce the behavior: -->
+1. 
+2. 
+3. 
 
 ## Expected Behavior
-What you expected to happen.
+<!-- What you expected to happen. -->
 
 ## Actual Behavior
-What actually happened.
+<!-- What actually happened. -->
 
 ## Environment
-- OS: (Linux/macOS/other)
-- GCC version: (output of `gcc --version`)
-- CMake version: (output of `cmake --version`)
+- **OS:** (e.g., Ubuntu 22.04, macOS 13)
+- **SmoothOperator Version:** (e.g., 0.1.0)
+- **Build:** Debug / Release
 
 ## Logs
 ```
@@ -30,4 +33,4 @@ Paste relevant logs here
 ```
 
 ## Additional Context
-Any other context.
+<!-- Add any other context about the problem here. -->

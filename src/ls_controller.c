@@ -22,9 +22,7 @@ controller_t *controller_create(const config_t *cfg) {
   ctrl->healthy = true;
 
   /* Connect to Liquidsoap */
-  ctrl->ls_sock = ls_socket_create(cfg->liquidsoap_host,
-                                    cfg->liquidsoap_port,
-                                    cfg->liquidsoap_timeout_ms);
+  ctrl->ls_sock = ls_socket_create_from_config(cfg);
 
   if (ctrl->ls_sock == NULL) {
     free(ctrl);
