@@ -2,7 +2,7 @@
 
 ## Message Schema (JSON)
 
-Todas as mensagens RabbitMQ seguem este schema:
+All RabbitMQ messages follow this schema:
 
 ```json
 {
@@ -15,112 +15,407 @@ Todas as mensagens RabbitMQ seguem este schema:
 }
 ```
 
-### Campos Obrigatórios
-- `version` (integer): Schema version, sempre 1 pra v1.0
-- `id` (string): ID único da mensagem (UUID ou similar)
+### Required Fields
+- `version` (integer): Schema version, always `1` for v1.0
+- `id` (string): Unique message ID (UUID or similar)
 - `timestamp` (string): ISO 8601 timestamp
-- `event` (string): Tipo de evento (ex: `control.skip`)
+- `event` (string): Event type (e.g., `control.skip`)
 
-### Campos Opcionais
-- `source` (string): Qual producer enviou (útil pra debug)
-- `payload` (object): Dados específicos do evento
+### Optional Fields
+- `source` (string): Producer identifier (useful for debugging)
+- `payload` (object): Event-specific data
 
 ---
 
-## Eventos Suportados (v1.0)
+## Liquidsoap Control Events
 
-### control.skip
-**Descrição**: Pular para próxima música
+### Legacy Events (backward compatible)
+
+#### control.skip
+Skip to next track.
 
 ```json
 {
   "version": 1,
   "id": "skip_001",
   "timestamp": "2026-04-20T10:30:00Z",
-  "source": "radio_cli",
   "event": "control.skip",
-  "payload": {
-    "reason": "manual_override"
-  }
+  "payload": {}
 }
 ```
 
-**Resposta**:
-```json
-{
-  "version": 1,
-  "id": "resp_skip_001",
-  "timestamp": "2026-04-20T10:30:00.050Z",
-  "source": "smoothoperator",
-  "event": "ls.response",
-  "payload": {
-    "request_id": "skip_001",
-    "status": "ok",
-    "message": "skipped to next track",
-    "latency_ms": 45
-  }
-}
-```
-
----
-
-### control.shutdown
-**Descrição**: Desligar Liquidsoap (use com cuidado!)
+#### control.shutdown
+Shut down Liquidsoap (use with care!).
 
 ```json
 {
   "version": 1,
   "id": "shutdown_001",
   "timestamp": "2026-04-20T10:30:00Z",
-  "source": "radio_cli",
   "event": "control.shutdown",
-  "payload": {
-    "reason": "maintenance"
-  }
+  "payload": {}
 }
 ```
 
----
-
-### announcement.push
-**Descrição**: Empurrar arquivo de anúncio pra fila
+#### announcement.push
+Push file to announcement queue.
 
 ```json
 {
   "version": 1,
   "id": "announce_001",
   "timestamp": "2026-04-20T10:30:00Z",
-  "source": "jax_silver",
   "event": "announcement.push",
   "payload": {
-    "filepath": "/opt/radio/audio/announcements/jax_20260420_1030.mp3",
-    "priority": "high"
+    "filepath": "/opt/radio/audio/announcements/jingle.mp3"
   }
 }
 ```
 
 ---
 
-### playlist.change
-**Descrição**: Trocar playlist ativa
+### Source Controls
+
+#### source.skip
+Skip on a specific source (queue).
 
 ```json
 {
   "version": 1,
-  "id": "playlist_001",
-  "timestamp": "2026-04-20T10:30:00Z",
-  "source": "produtor",
-  "event": "playlist.change",
+  "id": "src_skip_001",
+  "event": "source.skip",
   "payload": {
-    "playlist_name": "manha_desconfortavel",
-    "start_time": "2026-04-20T06:00:00Z"
+    "source": "main_stream"
+  }
+}
+```
+
+#### source.metadata
+Get current playing track metadata.
+
+```json
+{
+  "version": 1,
+  "id": "meta_001",
+  "event": "source.metadata",
+  "payload": {
+    "source": "main_stream"
+  }
+}
+```
+
+#### source.remaining
+Get remaining time of current track.
+
+```json
+{
+  "version": 1,
+  "id": "remain_001",
+  "event": "source.remaining",
+  "payload": {
+    "source": "main_stream"
   }
 }
 ```
 
 ---
 
-## Exchange e Queues
+### Request / Queue Operations
+
+#### request.push
+Push URI to a queue (generalized `announcement.push`).
+
+```json
+{
+  "version": 1,
+  "id": "req_push_001",
+  "event": "request.push",
+  "payload": {
+    "queue": "announcements",
+    "uri": "file:///opt/audio/announce.mp3"
+  }
+}
+```
+
+#### request.queue.list
+List all requests in a queue.
+
+```json
+{
+  "version": 1,
+  "id": "queue_list_001",
+  "event": "request.queue.list",
+  "payload": {
+    "queue": "announcements"
+  }
+}
+```
+
+#### request.on_air
+List requests currently on air.
+
+```json
+{
+  "version": 1,
+  "id": "on_air_001",
+  "event": "request.on_air",
+  "payload": {}
+}
+```
+
+#### request.alive
+List "alive" (resolving) requests.
+
+```json
+{
+  "version": 1,
+  "id": "alive_001",
+  "event": "request.alive",
+  "payload": {}
+}
+```
+
+#### request.metadata
+Get metadata for a specific request ID.
+
+```json
+{
+  "version": 1,
+  "id": "req_meta_001",
+  "event": "request.metadata",
+  "payload": {
+    "rid": 42
+  }
+}
+```
+
+#### request.trace
+Trace/debug a specific request ID.
+
+```json
+{
+  "version": 1,
+  "id": "req_trace_001",
+  "event": "request.trace",
+  "payload": {
+    "rid": 42
+  }
+}
+```
+
+---
+
+### Interactive Variables
+
+#### var.list
+List all interactive variables.
+
+```json
+{
+  "version": 1,
+  "id": "var_list_001",
+  "event": "var.list",
+  "payload": {}
+}
+```
+
+#### var.get
+Get value of an interactive variable.
+
+```json
+{
+  "version": 1,
+  "id": "var_get_001",
+  "event": "var.get",
+  "payload": {
+    "name": "crossfade_duration"
+  }
+}
+```
+
+#### var.set
+Set value of an interactive variable.
+
+```json
+{
+  "version": 1,
+  "id": "var_set_001",
+  "event": "var.set",
+  "payload": {
+    "name": "crossfade_duration",
+    "value": "5.0"
+  }
+}
+```
+
+---
+
+### Output Controls
+
+#### output.start
+Start an output.
+
+```json
+{
+  "version": 1,
+  "id": "out_start_001",
+  "event": "output.start",
+  "payload": {
+    "output": "icecast"
+  }
+}
+```
+
+#### output.stop
+Stop an output.
+
+```json
+{
+  "version": 1,
+  "id": "out_stop_001",
+  "event": "output.stop",
+  "payload": {
+    "output": "icecast"
+  }
+}
+```
+
+---
+
+### Playlist Controls
+
+#### playlist.reload
+Reload a playlist.
+
+```json
+{
+  "version": 1,
+  "id": "pl_reload_001",
+  "event": "playlist.reload",
+  "payload": {
+    "playlist": "morning_show"
+  }
+}
+```
+
+---
+
+### Server Introspection
+
+#### server.uptime
+Get Liquidsoap uptime.
+
+```json
+{
+  "version": 1,
+  "id": "uptime_001",
+  "event": "server.uptime",
+  "payload": {}
+}
+```
+
+#### server.version
+Get Liquidsoap version.
+
+```json
+{
+  "version": 1,
+  "id": "version_001",
+  "event": "server.version",
+  "payload": {}
+}
+```
+
+#### server.list
+List all available server commands.
+
+```json
+{
+  "version": 1,
+  "id": "list_001",
+  "event": "server.list",
+  "payload": {}
+}
+```
+
+#### server.help
+Get help for a command.
+
+```json
+{
+  "version": 1,
+  "id": "help_001",
+  "event": "server.help",
+  "payload": {
+    "command": "var.set"
+  }
+}
+```
+
+---
+
+## Response Format
+
+All successful commands receive an implicit acknowledge via RabbitMQ ACK. For getter commands (`source.metadata`, `var.get`, `request.queue.list`), the response body is returned via the response latency metric and message field.
+
+On error:
+- `RESULT_INVALID`: Message schema validation failed or unknown event → NACK (no requeue)
+- `RESULT_ERROR`: Command was valid but Liquidsoap returned an error → NACK (no requeue)
+- `RESULT_RETRY`: Connection failure or socket timeout → NACK (requeue=true)
+
+---
+
+## Liquidsoap Protocol (Transport)
+
+SmoothOperator communicates with Liquidsoap via either:
+
+### TCP Telnet (default)
+Port 1234 (configurable via `LIQUIDSOAP_PORT`). Set `LIQUIDSOAP_PROTOCOL=telnet`.
+
+### Unix Domain Socket
+For local-only deployments. Set `LIQUIDSOAP_PROTOCOL=socket` and `LIQUIDSOAP_SOCKET_PATH=/path/to/socket`.
+
+Both transports use plain-text line protocol:
+- Commands: `command_name args\n`
+- Responses: Multiple lines terminated by a line containing only `END`
+
+Example:
+```
+→ var.get my_var
+← my_var = 5.0
+← END
+```
+
+---
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Default | Required | Notes |
+|---|---|---|---|
+| `LIQUIDSOAP_PROTOCOL` | `telnet` | No | `telnet` or `socket` |
+| `LIQUIDSOAP_HOST` | - | telnet mode | Hostname/IP |
+| `LIQUIDSOAP_PORT` | - | telnet mode | Port number (1-65535) |
+| `LIQUIDSOAP_SOCKET_PATH` | - | socket mode | Absolute path to Unix socket |
+| `LIQUIDSOAP_TIMEOUT_MS` | `3000` | No | Socket I/O timeout |
+
+### Example: TCP Telnet (default)
+```bash
+LIQUIDSOAP_PROTOCOL=telnet
+LIQUIDSOAP_HOST=127.0.0.1
+LIQUIDSOAP_PORT=1234
+```
+
+### Example: Unix Domain Socket
+```bash
+LIQUIDSOAP_PROTOCOL=socket
+LIQUIDSOAP_SOCKET_PATH=/var/run/liquidsoap/ls.sock
+```
+
+---
+
+## Exchange & Queues
 
 ### Exchange
 - **Name**: `radio.events`
@@ -128,105 +423,52 @@ Todas as mensagens RabbitMQ seguem este schema:
 - **Durable**: true
 - **Auto-delete**: false
 
-### Queues
+### Queue
 - **Name**: `ls.commands`
 - **Durable**: true
 - **Exclusive**: false
-- **QoS**: prefetch=1 (processa um de cada vez)
+- **QoS**: prefetch=1 (process one message at a time)
 
 ### Bindings
 
-| Queue | Exchange | Routing Key |
-|-------|----------|------------|
-| `ls.commands` | `radio.events` | `control.*` |
-| `ls.commands` | `radio.events` | `announcement.*` |
-| `ls.commands` | `radio.events` | `playlist.*` |
+| Routing Key | Queue |
+|---|---|
+| `control.*` | `ls.commands` |
+| `announcement.*` | `ls.commands` |
+| `source.*` | `ls.commands` |
+| `request.*` | `ls.commands` |
+| `var.*` | `ls.commands` |
+| `output.*` | `ls.commands` |
+| `playlist.*` | `ls.commands` |
+| `server.*` | `ls.commands` |
 
 ---
 
-## Liquidsoap Protocol
+## Error Handling
 
-Memphis comunica com Liquidsoap via TCP socket (porta 1234) com protocolo de texto simples.
+### Invalid Messages
+Messages that fail schema validation (missing required fields, wrong types) are:
+1. Logged at WARN level
+2. NACK'd without requeue
+3. Optionally moved to DLQ if configured
 
-### Comandos Suportados
+### Unknown Events
+Unknown event types return `RESULT_INVALID` and are NACK'd without requeue.
 
-```
-next                          # Pular pra próxima música
-shutdown                      # Desligar Liquidsoap
-announcements.push <filepath> # Empurrar anúncio
-jax.nowplaying                # Get current track (artist|title)
-```
-
-### Respostas
-
-```
-OK                       # Sucesso
-ERR <message>           # Erro
-```
+### Connection Failures
+If Liquidsoap is unreachable or socket times out:
+1. Response is NACK'd with requeue=true
+2. Controller marks itself unhealthy
+3. Automatic exponential backoff on reconnection
 
 ---
 
-## Fluxo Exemplo: Skip de Música
+## Testing
 
-```
-1. radio_cli publica mensagem em "radio.events"
-   routing_key: "control.skip"
-   message_id: "skip_001"
-
-2. RabbitMQ roteia para fila "ls.commands"
-
-3. Memphis consumer recebe mensagem
-
-4. Valida schema (version=1, id, event obrigatórios)
-
-5. Parseia event type "control.skip"
-
-6. Envia "next" ao socket TCP do Liquidsoap
-
-7. Liquidsoap responde "OK"
-
-8. Memphis formata resposta JSON
-
-9. Publica resposta em "radio.events" 
-   routing_key: "ls.response"
-   request_id: "skip_001"
-   status: "ok"
-   latency_ms: 45
-
-10. ACK da mensagem para RabbitMQ
-```
-
----
-
-## Versionamento
-
-**Schema versioning**: Se precisar quebrar compatibilidade, crie nova versão:
-- Versão 1: campo "source" opcional
-- Versão 2 (futuro): requerer "source", adicionar novos campos
-
-Consumidores devem ignorar versões desconhecidas gracefully.
-
----
-
-## Dead Letter Queue (DLQ)
-
-Mensagens que:
-- Falham schema validation
-- Event type desconhecido
-- Erro ao processar (retry esgotado)
-
-...são movidas para fila `ls.commands.dlq` para análise.
-
----
-
-## Teste Manual (para dev)
+### Manual Test (requires RabbitMQ + Liquidsoap running)
 
 ```bash
-# Conectar ao RabbitMQ
-sudo rabbitmqctl list_exchanges
-sudo rabbitmqctl list_queues
-
-# Publicar mensagem de teste
+# Publish a skip event
 python3 << 'EOF'
 import pika
 import json
@@ -242,7 +484,7 @@ message = {
     "timestamp": datetime.utcnow().isoformat() + "Z",
     "source": "test_script",
     "event": "control.skip",
-    "payload": {"reason": "manual_test"}
+    "payload": {}
 }
 
 channel.basic_publish(
@@ -256,3 +498,7 @@ print("Message published")
 conn.close()
 EOF
 ```
+
+---
+
+**Last Updated**: 2026-04-20

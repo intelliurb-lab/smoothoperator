@@ -3,7 +3,7 @@
 > High-performance RabbitMQ-to-Liquidsoap controller in C11
 
 [![License: BSD-2-Clause](https://img.shields.io/badge/License-BSD%202--Clause-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-18%2F18%20PASSED-brightgreen)](test/)
+[![Tests](https://img.shields.io/badge/Tests-36%2F36%20PASSED-brightgreen)](test/)
 [![Memory Safe](https://img.shields.io/badge/Memory%20Safe-ASAN%2FUBSAN%20Clean-brightgreen)](src/)
 [![C11](https://img.shields.io/badge/C-11-blue.svg)](CMakeLists.txt)
 
@@ -30,14 +30,16 @@ RabbitMQ               SmoothOperator              Liquidsoap
 
 ## ✨ Features
 
+- ✅ **22+ Liquidsoap commands** — Control sources, queues, variables, outputs, playlists
+- ✅ **Dual transport** — TCP telnet or Unix domain socket (configurable)
 - ✅ **Event-driven architecture** — Consumes RabbitMQ messages, routes to Liquidsoap
-- ✅ **Persistent TCP connection** — No overhead from repeated handshakes
+- ✅ **Persistent connections** — TCP keep-alive or socket mode, no reconnect overhead
 - ✅ **Automatic retry** — Failed messages re-queued with exponential backoff
-- ✅ **Schema validation** — All messages validated against JSON spec
+- ✅ **Schema validation** — All payload fields validated per-event
 - ✅ **Structured logging** — JSON audit logs with full event tracking
 - ✅ **Memory safe** — Zero-copy parsing, ASAN/UBSAN clean, bounds checked
 - ✅ **Minimal dependencies** — Pure C, only librabbitmq + jansson + cunit
-- ✅ **Security hardened** — TLS ready, safe functions, privilege dropping
+- ✅ **Security hardened** — Unix socket symlink protection, world-writable checks
 
 ---
 
@@ -69,15 +71,29 @@ cp conf/smoothoperator.env .env
 nano .env
 ```
 
-**Required variables:**
+**Required variables (RabbitMQ):**
 ```bash
 RABBITMQ_HOST=127.0.0.1
+RABBITMQ_PORT=5672
 RABBITMQ_USER=memphis
 RABBITMQ_PASS=your_strong_password_here_min_12_chars
-LIQUIDSOAP_HOST=127.0.0.1
-LIQUIDSOAP_PORT=1234
 LOG_FILE=/var/log/smoothoperator.log
 LOG_LEVEL=INFO
+```
+
+**Liquidsoap transport (choose one):**
+
+*TCP (Telnet) — default:*
+```bash
+LIQUIDSOAP_PROTOCOL=telnet
+LIQUIDSOAP_HOST=127.0.0.1
+LIQUIDSOAP_PORT=1234
+```
+
+*Unix Domain Socket — recommended for local deployments:*
+```bash
+LIQUIDSOAP_PROTOCOL=socket
+LIQUIDSOAP_SOCKET_PATH=/var/run/liquidsoap/ls.sock
 ```
 
 ### Run
@@ -123,13 +139,31 @@ EOF
 
 ---
 
-## 📚 Supported Events
+## 📚 Supported Events (22+)
 
-| Event | Command | Purpose |
-|-------|---------|---------|
-| `control.skip` | `next` | Skip current song |
-| `control.shutdown` | `shutdown` | Stop playback |
-| `announcement.push` | `announcements.push /path/file.mp3` | Queue audio file |
+**Legacy (backward compatible):**
+- `control.skip` — Skip to next track
+- `control.shutdown` — Shut down Liquidsoap
+- `announcement.push` — Push file to announcement queue
+
+**Source Controls:**
+- `source.skip`, `source.metadata`, `source.remaining`
+
+**Request / Queue:**
+- `request.push`, `request.queue.list`, `request.on_air`, `request.alive`
+- `request.metadata`, `request.trace`
+
+**Interactive Variables:**
+- `var.list`, `var.get`, `var.set`
+
+**Output / Playlist:**
+- `output.start`, `output.stop`
+- `playlist.reload`
+
+**Server Introspection:**
+- `server.uptime`, `server.version`, `server.list`, `server.help`
+
+See [docs/API.md](docs/API.md) for full event schemas and payload validation rules.
 
 ---
 
@@ -147,7 +181,7 @@ ASAN_OPTIONS=verbosity=1 ./build/bin/smoothoperator --help
 make coverage
 ```
 
-**All 18 tests passing** ✅
+**All 36 tests passing** ✅ (4 suites: message + config + client + controller)
 
 ---
 
