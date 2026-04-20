@@ -10,7 +10,7 @@
 #include <sys/resource.h>
 #include <sys/prctl.h>
 
-#include "memphis.h"
+#include "smoothoperator.h"
 #include "config.h"
 #include "ls_controller.h"
 #include "rabbitmq_consumer.h"
@@ -83,14 +83,14 @@ static void disable_core_dumps(void) {
 static void usage(const char *prog) {
   fprintf(stderr, "Usage: %s [OPTIONS]\n", prog);
   fprintf(stderr, "OPTIONS:\n");
-  fprintf(stderr, "  -c, --config FILE    Config file (default: memphis.env)\n");
+  fprintf(stderr, "  -c, --config FILE    Config file (default: smoothoperator.env)\n");
   fprintf(stderr, "  -l, --log-level LEVEL Log level (DEBUG, INFO, WARN, ERROR)\n");
   fprintf(stderr, "  -v, --version        Show version\n");
   fprintf(stderr, "  -h, --help           Show this help\n");
 }
 
 int main(int argc, char *argv[]) {
-  const char *config_file = "memphis.env";
+  const char *config_file = "smoothoperator.env";
   const char *log_level = NULL;
 
   int opt;
@@ -154,9 +154,9 @@ int main(int argc, char *argv[]) {
   log_msg(LOG_INFO, "main", "Memphis starting", NULL, NULL);
 
   /* Drop privileges if running as root and MEMPHIS_USER is set */
-  const char *memphis_user = getenv("MEMPHIS_USER");
-  if (geteuid() == 0 && memphis_user) {
-    if (!drop_privileges(memphis_user)) {
+  const char *smoothoperator_user = getenv("MEMPHIS_USER");
+  if (geteuid() == 0 && smoothoperator_user) {
+    if (!drop_privileges(smoothoperator_user)) {
       log_msg(LOG_ERROR, "main", "Failed to drop privileges", NULL, NULL);
       config_free(cfg);
       log_cleanup();

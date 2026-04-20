@@ -32,7 +32,7 @@ cleanup (close connections, flush logs)
 exit
 ```
 
-**Config** vem de `memphis.env`:
+**Config** vem de `smoothoperator.env`:
 ```bash
 RABBITMQ_HOST=localhost
 RABBITMQ_PORT=5672
@@ -44,7 +44,7 @@ LIQUIDSOAP_PORT=1234
 LIQUIDSOAP_RECONNECT_MAX_DELAY=30s
 HTTP_HEALTHCHECK_PORT=9000
 LOG_LEVEL=INFO
-LOG_FILE=/var/log/memphis.log
+LOG_FILE=/var/log/smoothoperator.log
 ```
 
 ### 2. rabbitmq_consumer.c
@@ -117,7 +117,7 @@ Eventos suportados (v1.0):
   "version": 1,
   "id": "01HWX5K2M8QPQZ...",
   "timestamp": "2026-04-20T10:30:00.123Z",
-  "source": "memphis",
+  "source": "smoothoperator",
   "event": "ls.response",
   "payload": {
     "request_id": "01HWX5K2M8QPQZ...",
@@ -200,7 +200,7 @@ if (!config_is_valid(cfg)) {
 
 **Precedência**:
 1. Environment variables
-2. `memphis.env` se existir
+2. `smoothoperator.env` se existir
 3. Defaults sensatos
 
 ## Data Flow

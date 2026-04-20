@@ -1,6 +1,6 @@
 #include "ls_controller.h"
 #include "liquidsoap_client.h"
-#include "memphis.h"
+#include "smoothoperator.h"
 #include <stdlib.h>
 #include <string.h>
 

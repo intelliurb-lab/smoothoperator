@@ -3,7 +3,7 @@
 
 #include "config.h"
 #include "message.h"
-#include "memphis.h"
+#include "smoothoperator.h"
 
 typedef struct controller controller_t;
 

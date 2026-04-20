@@ -1,11 +1,11 @@
-# Memphis — RabbitMQ Controller for Liquidsoap
+# SmoothOperator — RabbitMQ Controller for Liquidsoap
 
 A high-performance C daemon that bridges RabbitMQ and Liquidsoap, providing event-driven audio stream control with reliable message routing.
 
 ```
 RabbitMQ (message bus)
     ↓
-Memphis (this daemon)
+SmoothOperator (this daemon)
     ↓
 Liquidsoap (audio server)
 ```
@@ -21,7 +21,8 @@ Liquidsoap (audio server)
 ✅ **Structured logging** — JSON audit logs with timestamps and event tracking  
 ✅ **Persistent connection** — Maintains TCP socket to Liquidsoap (no setup/teardown overhead)  
 ✅ **Memory-safe** — Zero-copy JSON parsing, bounds checking, ASAN/UBSAN clean  
-✅ **No heavy dependencies** — Pure C, minimal libraries (librabbitmq, jansson, cunit)
+✅ **No heavy dependencies** — Pure C, minimal libraries (librabbitmq, jansson, cunit)  
+✅ **Production-ready** — Security hardened, fully tested, BSD 2-Clause licensed
 
 ---
 
@@ -30,9 +31,9 @@ Liquidsoap (audio server)
 ❌ **Does NOT encrypt messages by default** — Use TLS for production (configuration provided)  
 ❌ **Does NOT authenticate senders** — All RabbitMQ producers are trusted; add HMAC-SHA256 if needed  
 ❌ **Does NOT perform rate limiting** — Implement via RabbitMQ policies or middleware  
-❌ **Does NOT provide HTTP health check** — (Planned for Phase 2)  
+❌ **Does NOT provide HTTP health check** — (Planned for v0.2)  
 ❌ **Does NOT manage Liquidsoap lifecycle** — Assumes Liquidsoap is already running  
-❌ **Does NOT support clustering** — Single-instance daemon (horizontal scaling via RabbitMQ)
+❌ **Does NOT support clustering** — Single-instance daemon (use RabbitMQ for horizontal scaling)
 
 ---
 
@@ -70,7 +71,7 @@ make debug
 make release
 
 # Verify build succeeded
-ls -lh build/bin/memphis
+ls -lh build/bin/smoothoperator
 ```
 
 ---
@@ -81,7 +82,7 @@ ls -lh build/bin/memphis
 
 Create `.env` file from example:
 ```bash
-cp conf/memphis.env .env
+cp conf/smoothoperator.env .env
 ```
 
 Edit `.env` with your values:
@@ -89,7 +90,7 @@ Edit `.env` with your values:
 # RabbitMQ
 RABBITMQ_HOST=127.0.0.1
 RABBITMQ_PORT=5672
-RABBITMQ_USER=memphis
+RABBITMQ_USER=smoothoperator
 RABBITMQ_PASS=your_strong_password_here_min_12_chars
 RABBITMQ_VHOST=/
 
@@ -100,7 +101,7 @@ LIQUIDSOAP_TIMEOUT_MS=3000
 
 # Logging
 LOG_LEVEL=INFO
-LOG_FILE=/var/log/memphis.log
+LOG_FILE=/var/log/smoothoperator.log
 ```
 
 ### 2. Start RabbitMQ
@@ -116,7 +117,7 @@ docker run -d --name rabbitmq -p 5672:5672 rabbitmq:3
 
 ### 3. Start Liquidsoap
 
-Memphis expects Liquidsoap to be listening on TCP port 1234:
+SmoothOperator expects Liquidsoap to be listening on TCP port 1234:
 
 ```bash
 # Example Liquidsoap script with telnet server
@@ -125,17 +126,17 @@ liquidsoap '
 '
 ```
 
-### 4. Start Memphis
+### 4. Start SmoothOperator
 
 ```bash
 # Load environment variables
 source .env
 
-# Run daemon (logs to /var/log/memphis.log)
-./build/bin/memphis
+# Run daemon (logs to /var/log/smoothoperator.log)
+./build/bin/smoothoperator
 
 # Or run in foreground for testing
-LOG_FILE=- ./build/bin/memphis
+LOG_FILE=- ./build/bin/smoothoperator
 ```
 
 ### 5. Send Test Messages
@@ -205,11 +206,11 @@ Generated HTML report in `coverage_html/index.html`
 
 ### Memory Safety Verification
 
-Memphis is compiled with AddressSanitizer (ASAN) and UndefinedBehaviorSanitizer (UBSAN) in debug mode:
+SmoothOperator is compiled with AddressSanitizer (ASAN) and UndefinedBehaviorSanitizer (UBSAN) in debug mode:
 
 ```bash
 make debug
-ASAN_OPTIONS=verbosity=1 ./build/bin/memphis
+ASAN_OPTIONS=verbosity=1 ./build/bin/smoothoperator
 ```
 
 Should show no memory errors or undefined behavior.
@@ -223,8 +224,8 @@ Should show no memory errors or undefined behavior.
 **Required:**
 - `RABBITMQ_HOST` — RabbitMQ server hostname/IP
 - `RABBITMQ_PORT` — RabbitMQ port (default: 5672)
-- `RABBITMQ_USER` — Username (min 1 char)
-- `RABBITMQ_PASS` — Password (min 12 chars)
+- `RABBITMQ_USER` — Username
+- `RABBITMQ_PASS` — Password (minimum 12 characters)
 - `LIQUIDSOAP_HOST` — Liquidsoap server hostname/IP
 - `LIQUIDSOAP_PORT` — Liquidsoap telnet port (default: 1234)
 - `LOG_FILE` — Path to log file (or `-` for stdout)
@@ -239,20 +240,20 @@ Should show no memory errors or undefined behavior.
 ### Security Notes
 
 - Never commit `.env` with real credentials
-- Use strong passwords (min 12 characters)
+- Use strong passwords (minimum 12 characters)
 - Enable TLS for production (`RABBITMQ_TLS_ENABLED=1`)
 - Restrict RabbitMQ access via firewall
-- Run as unprivileged user via `MEMPHIS_USER=memphis`
+- Run as unprivileged user
 - Monitor logs for errors and security events
 
 ---
 
 ## Architecture
 
-For detailed architecture, design decisions, and data flow diagrams, see [ARCHITECTURE.md](ARCHITECTURE.md).
+For detailed architecture and design decisions, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Key points:
-- **Single-threaded event loop** — Blocks on `amqp_consume_message()` and `ls_send_command()`
+- **Single-threaded event loop** — Blocking consumer pattern on `amqp_consume_message()`
 - **Persistent TCP socket** — Maintains connection to Liquidsoap across multiple commands
 - **Schema validation** — All messages validated against JSON schema before routing
 - **Graceful shutdown** — Properly closes RabbitMQ channel and Liquidsoap socket on SIGTERM
@@ -330,14 +331,14 @@ ls -la $(dirname $LOG_FILE)
 echo $LOG_LEVEL
 
 # Try logging to stdout
-LOG_FILE=- ./build/bin/memphis
+LOG_FILE=- ./build/bin/smoothoperator
 ```
 
 ### Memory Issues
 ```bash
 # Check for leaks in debug mode
 make debug
-ASAN_OPTIONS=verbosity=2 ./build/bin/memphis
+ASAN_OPTIONS=verbosity=2 ./build/bin/smoothoperator
 
 # Should show no leaks or undefined behavior
 ```
@@ -356,7 +357,7 @@ src/
   ├── liquidsoap_client.c — TCP socket management and command sending
   ├── rabbitmq_consumer.c — AMQP consumer loop and message handling
   ├── ls_controller.c     — Event routing and command execution
-  └── memphis_logging.c   — Structured JSON logging
+  └── smoothoperator_logging.c   — Structured JSON logging
 include/
   └── *.h                 — Public headers
 test/
@@ -400,9 +401,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 **CPU usage:** <1% idle
 
 For production deployments with high throughput, consider:
-- Running multiple Memphis instances behind a load balancer
+- Running multiple SmoothOperator instances behind RabbitMQ
 - Configuring RabbitMQ queue sharding
-- Monitoring via health endpoint (planned Phase 2)
+- Monitoring via health endpoint (planned v0.2)
 
 ---
 
@@ -410,13 +411,13 @@ For production deployments with high throughput, consider:
 
 **BSD 2-Clause License** — See [LICENSE](LICENSE) for details
 
-Memphis is open source and freely available for commercial and personal use.
+SmoothOperator is open source and freely available for commercial and personal use.
 
 ---
 
 ## Terms of Use
 
-By using Memphis, you agree to the terms in [TERMS_OF_USE.md](TERMS_OF_USE.md). Key points:
+By using SmoothOperator, you agree to the terms in [TERMS_OF_USE.md](TERMS_OF_USE.md). Key points:
 
 - Use for lawful purposes only
 - Do not use for malicious activities (DoS, hacking, etc.)
@@ -448,8 +449,8 @@ For issues, questions, or contributions:
 | JSON Validation | ✅ Complete |
 | Unit Tests | ✅ 18/18 Passing |
 | TLS Support | 🟡 Configurable (pending implementation) |
-| HTTP Health Check | ⏳ Planned Phase 2 |
-| Message Signing | ⏳ Planned Phase 2 |
+| HTTP Health Check | ⏳ Planned v0.2 |
+| Message Signing | ⏳ Planned v0.2 |
 
 ---
 

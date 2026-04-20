@@ -51,7 +51,7 @@ Todas as mensagens RabbitMQ seguem este schema:
   "version": 1,
   "id": "resp_skip_001",
   "timestamp": "2026-04-20T10:30:00.050Z",
-  "source": "memphis",
+  "source": "smoothoperator",
   "event": "ls.response",
   "payload": {
     "request_id": "skip_001",

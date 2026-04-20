@@ -9,8 +9,8 @@ Be respectful, inclusive, and constructive. We're building a friendly community.
 ## Development Setup
 
 ```bash
-git clone https://github.com/intelliurb/memphis.git
-cd memphis
+git clone https://github.com/intelliurb/smoothoperator.git
+cd smoothoperator
 
 # Install dependencies
 sudo apt-get install -y build-essential cmake librabbitmq-dev libjansson-dev libcunit1-dev

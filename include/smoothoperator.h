@@ -7,7 +7,7 @@
 
 /* Version */
 #define MEMPHIS_VERSION "0.1.0"
-#define MEMPHIS_NAME "memphis"
+#define MEMPHIS_NAME "smoothoperator"
 
 /* Log levels */
 typedef enum {

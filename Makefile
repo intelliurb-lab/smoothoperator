@@ -33,14 +33,14 @@ debug: setup
 	@mkdir -p $(BUILD_DIR)
 	@cd $(BUILD_DIR) && $(CMAKE) $(CMAKE_FLAGS) -DCMAKE_BUILD_TYPE=Debug ..
 	@cd $(BUILD_DIR) && make -j$$(nproc)
-	@echo "✓ Binário em ./$(BUILD_DIR)/bin/memphis"
+	@echo "✓ Binário em ./$(BUILD_DIR)/bin/smoothoperator"
 
 release: setup
 	@echo "==> Build RELEASE..."
 	@mkdir -p $(BUILD_DIR)
 	@cd $(BUILD_DIR) && $(CMAKE) $(CMAKE_FLAGS) -DCMAKE_BUILD_TYPE=Release ..
 	@cd $(BUILD_DIR) && make -j$$(nproc)
-	@echo "✓ Binário em ./$(BUILD_DIR)/bin/memphis"
+	@echo "✓ Binário em ./$(BUILD_DIR)/bin/smoothoperator"
 
 # ============================================================================
 # Testes
@@ -109,18 +109,18 @@ distclean: clean
 # ============================================================================
 
 install: release
-	@echo "==> Binary will be installed to /usr/local/bin/memphis"
-	@sha256sum $(BUILD_DIR)/bin/memphis
+	@echo "==> Binary will be installed to /usr/local/bin/smoothoperator"
+	@sha256sum $(BUILD_DIR)/bin/smoothoperator
 	@read -p "Proceed? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
-	@sudo install -D -m 755 $(BUILD_DIR)/bin/memphis /usr/local/bin/memphis
-	@echo "✓ Instalado em /usr/local/bin/memphis"
+	@sudo install -D -m 755 $(BUILD_DIR)/bin/smoothoperator /usr/local/bin/smoothoperator
+	@echo "✓ Instalado em /usr/local/bin/smoothoperator"
 
 install-systemd:
 	@echo "==> Instalando systemd service..."
-	@sudo install -D -m 644 scripts/memphis.service /etc/systemd/system/
-	@sudo install -D -m 640 memphis.env /etc/memphis/memphis.env
+	@sudo install -D -m 644 scripts/smoothoperator.service /etc/systemd/system/
+	@sudo install -D -m 640 smoothoperator.env /etc/smoothoperator/smoothoperator.env
 	@sudo systemctl daemon-reload
-	@echo "✓ Service instalado. Execute: sudo systemctl start memphis"
+	@echo "✓ Service instalado. Execute: sudo systemctl start smoothoperator"
 
 # ============================================================================
 # Development
@@ -149,7 +149,7 @@ help:
 	@echo "  make lint               Check formatting"
 	@echo "  make format             Reformat código"
 	@echo "  make static-analysis    cppcheck"
-	@echo "  make install            Install /usr/local/bin/memphis"
+	@echo "  make install            Install /usr/local/bin/smoothoperator"
 	@echo "  make install-systemd    Install systemd service"
 	@echo "  make watch              Watch + test contínuo"
 	@echo "  make clean              Remove build/"

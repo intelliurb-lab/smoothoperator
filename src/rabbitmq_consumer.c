@@ -1,7 +1,7 @@
 #include "rabbitmq_consumer.h"
 #include "ls_controller.h"
 #include "message.h"
-#include "memphis.h"
+#include "smoothoperator.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

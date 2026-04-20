@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(memphis
+project(smoothoperator
   VERSION 0.1.0
   DESCRIPTION "Memphis - Intelliurb FM RabbitMQ Controller"
   LANGUAGES C
@@ -51,12 +51,12 @@ set(MEMPHIS_SOURCES
   src/liquidsoap_client.c
   src/rabbitmq_consumer.c
   src/ls_controller.c
-  src/memphis_logging.c
+  src/smoothoperator_logging.c
 )
 
 # Executável principal
-add_executable(memphis ${MEMPHIS_SOURCES})
-target_link_libraries(memphis
+add_executable(smoothoperator ${MEMPHIS_SOURCES})
+target_link_libraries(smoothoperator
   ${LIBRABBITMQ_LIBRARIES}
   ${JANSSON_LIBRARIES}
   m
@@ -77,8 +77,8 @@ set(TEST_SOURCES
 list(REMOVE_ITEM MEMPHIS_SOURCES src/main.c)
 
 # Executável de testes
-add_executable(memphis_tests ${TEST_SOURCES} ${MEMPHIS_SOURCES})
-target_link_libraries(memphis_tests
+add_executable(smoothoperator_tests ${TEST_SOURCES} ${MEMPHIS_SOURCES})
+target_link_libraries(smoothoperator_tests
   ${LIBRABBITMQ_LIBRARIES}
   ${JANSSON_LIBRARIES}
   ${CUNIT_LIBRARIES}
@@ -88,7 +88,7 @@ target_link_libraries(memphis_tests
 # Discovery automático de testes
 add_test(
   NAME MemphisTests
-  COMMAND memphis_tests
+  COMMAND smoothoperator_tests
 )
 
 # Opções de build

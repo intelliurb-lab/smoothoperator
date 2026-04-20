@@ -12,7 +12,7 @@ static void setup_env_vars(void) {
   setenv("RABBITMQ_VHOST", "/", 1);
   setenv("LIQUIDSOAP_HOST", "127.0.0.1", 1);
   setenv("LIQUIDSOAP_PORT", "1234", 1);
-  setenv("LOG_FILE", "/tmp/memphis.log", 1);
+  setenv("LOG_FILE", "/tmp/smoothoperator.log", 1);
   setenv("LOG_LEVEL", "INFO", 1);
 }
 
