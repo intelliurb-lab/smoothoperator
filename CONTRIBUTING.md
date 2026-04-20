@@ -96,9 +96,6 @@ By contributing, you agree your code is under BSD 2-Clause License (see LICENSE)
 
 ## Questions?
 
-- Check `GETTING_STARTED.md` for dev setup
-- Check `ARCHITECTURE.md` for design questions
-- Check `API.md` for protocol questions
 - Open an issue for questions/discussions
 
 ---
