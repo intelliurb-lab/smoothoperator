@@ -70,6 +70,7 @@ set(TEST_SOURCES
   test/test_message.c
   test/test_config.c
   test/test_liquidsoap_client.c
+  test/test_ls_controller.c
   # test/test_rabbitmq_consumer.c  # integração, roda separado
 )
 
