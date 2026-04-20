@@ -1,10 +1,17 @@
-.PHONY: all debug release test coverage lint clean setup install
+.PHONY: all debug release test coverage lint clean setup install install-systemd watch help
 
-# Diretórios
+# Build directories
 BUILD_DIR := build
 SOURCE_DIR := src
 TEST_DIR := test
 INCLUDE_DIR := include
+
+# Installation directories (customize with: make install BASE_DIR=/opt/radio)
+BASE_DIR ?= /usr/local
+BIN_DIR ?= $(BASE_DIR)/bin
+CONFIG_DIR ?= /etc/smoothoperator
+LOG_DIR ?= /var/log/smoothoperator
+CONFIG_FILE ?= $(CONFIG_DIR)/smoothoperator.env
 
 # Configurações
 CMAKE := cmake
@@ -33,14 +40,14 @@ debug: setup
 	@mkdir -p $(BUILD_DIR)
 	@cd $(BUILD_DIR) && $(CMAKE) $(CMAKE_FLAGS) -DCMAKE_BUILD_TYPE=Debug ..
 	@cd $(BUILD_DIR) && make -j$$(nproc)
-	@echo "✓ Binário em ./$(BUILD_DIR)/bin/smoothoperator"
+	@echo "✓ Binário em ./$(BUILD_DIR)/smoothoperator"
 
 release: setup
 	@echo "==> Build RELEASE..."
 	@mkdir -p $(BUILD_DIR)
 	@cd $(BUILD_DIR) && $(CMAKE) $(CMAKE_FLAGS) -DCMAKE_BUILD_TYPE=Release ..
 	@cd $(BUILD_DIR) && make -j$$(nproc)
-	@echo "✓ Binário em ./$(BUILD_DIR)/bin/smoothoperator"
+	@echo "✓ Binário em ./$(BUILD_DIR)/smoothoperator"
 
 # ============================================================================
 # Testes
@@ -109,18 +116,64 @@ distclean: clean
 # ============================================================================
 
 install: release
-	@echo "==> Binary will be installed to /usr/local/bin/smoothoperator"
-	@sha256sum $(BUILD_DIR)/bin/smoothoperator
+	@echo "==> Installation Settings:"
+	@echo "    BASE_DIR:     $(BASE_DIR)"
+	@echo "    BIN_DIR:      $(BIN_DIR)"
+	@echo "    CONFIG_DIR:   $(CONFIG_DIR)"
+	@echo "    LOG_DIR:      $(LOG_DIR)"
+	@echo ""
+	@echo "==> Binary will be installed to $(BIN_DIR)/smoothoperator"
+	@sha256sum $(BUILD_DIR)/smoothoperator
 	@read -p "Proceed? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
-	@sudo install -D -m 755 $(BUILD_DIR)/bin/smoothoperator /usr/local/bin/smoothoperator
-	@echo "✓ Instalado em /usr/local/bin/smoothoperator"
+	@mkdir -p $(BIN_DIR) $(CONFIG_DIR) $(LOG_DIR)
+	@install -D -m 755 $(BUILD_DIR)/smoothoperator $(BIN_DIR)/smoothoperator
+	@install -D -m 640 smoothoperator.env.example $(CONFIG_FILE).example
+	@if [ ! -f $(CONFIG_FILE) ]; then \
+		cp $(CONFIG_FILE).example $(CONFIG_FILE); \
+		chmod 640 $(CONFIG_FILE); \
+		echo "✓ Config template copied to $(CONFIG_FILE)"; \
+	else \
+		echo "⚠ Config file exists, template saved as $(CONFIG_FILE).example"; \
+	fi
+	@echo "✓ Instalado em $(BIN_DIR)/smoothoperator"
+	@echo "✓ Config em $(CONFIG_FILE) (edit before starting)"
+	@echo "✓ Log dir: $(LOG_DIR)"
 
-install-systemd:
-	@echo "==> Instalando systemd service..."
-	@sudo install -D -m 644 scripts/smoothoperator.service /etc/systemd/system/
-	@sudo install -D -m 640 smoothoperator.env /etc/smoothoperator/smoothoperator.env
-	@sudo systemctl daemon-reload
-	@echo "✓ Service instalado. Execute: sudo systemctl start smoothoperator"
+install-systemd: install
+	@echo ""
+	@echo "==> Criando systemd service..."
+	@mkdir -p scripts
+	@echo '[Unit]' > scripts/smoothoperator.service.tmp
+	@echo 'Description=SmoothOperator - RabbitMQ to Liquidsoap Controller' >> scripts/smoothoperator.service.tmp
+	@echo 'After=network.target rabbitmq-server.service' >> scripts/smoothoperator.service.tmp
+	@echo 'Wants=rabbitmq-server.service' >> scripts/smoothoperator.service.tmp
+	@echo '' >> scripts/smoothoperator.service.tmp
+	@echo '[Service]' >> scripts/smoothoperator.service.tmp
+	@echo 'Type=simple' >> scripts/smoothoperator.service.tmp
+	@echo 'User=root' >> scripts/smoothoperator.service.tmp
+	@echo 'Group=root' >> scripts/smoothoperator.service.tmp
+	@echo 'WorkingDirectory=$(BASE_DIR)' >> scripts/smoothoperator.service.tmp
+	@echo 'EnvironmentFile=$(CONFIG_FILE)' >> scripts/smoothoperator.service.tmp
+	@echo 'ExecStart=$(BIN_DIR)/smoothoperator' >> scripts/smoothoperator.service.tmp
+	@echo 'Restart=on-failure' >> scripts/smoothoperator.service.tmp
+	@echo 'RestartSec=10' >> scripts/smoothoperator.service.tmp
+	@echo 'StandardOutput=journal' >> scripts/smoothoperator.service.tmp
+	@echo 'StandardError=journal' >> scripts/smoothoperator.service.tmp
+	@echo 'SyslogIdentifier=smoothoperator' >> scripts/smoothoperator.service.tmp
+	@echo '' >> scripts/smoothoperator.service.tmp
+	@echo '[Install]' >> scripts/smoothoperator.service.tmp
+	@echo 'WantedBy=multi-user.target' >> scripts/smoothoperator.service.tmp
+	@install -D -m 644 scripts/smoothoperator.service.tmp /etc/systemd/system/smoothoperator.service
+	@rm -f scripts/smoothoperator.service.tmp
+	@systemctl daemon-reload
+	@echo "✓ Systemd service criado em /etc/systemd/system/smoothoperator.service"
+	@echo ""
+	@echo "==> Próximos passos:"
+	@echo "    1. Edit config: nano $(CONFIG_FILE)"
+	@echo "    2. Enable service: systemctl enable smoothoperator"
+	@echo "    3. Start service: systemctl start smoothoperator"
+	@echo "    4. Check status: systemctl status smoothoperator"
+	@echo "    5. View logs: journalctl -u smoothoperator -f"
 
 # ============================================================================
 # Development
@@ -139,7 +192,7 @@ watch:
 # ============================================================================
 
 help:
-	@echo "Memphis — Intelliurb FM Controller"
+	@echo "SmoothOperator — RabbitMQ to Liquidsoap Controller"
 	@echo ""
 	@echo "Targets:"
 	@echo "  make debug              Build com símbolos (default)"
@@ -149,9 +202,21 @@ help:
 	@echo "  make lint               Check formatting"
 	@echo "  make format             Reformat código"
 	@echo "  make static-analysis    cppcheck"
-	@echo "  make install            Install /usr/local/bin/smoothoperator"
-	@echo "  make install-systemd    Install systemd service"
+	@echo "  make install            Build + install binary + config"
+	@echo "  make install-systemd    Install systemd service (calls install)"
 	@echo "  make watch              Watch + test contínuo"
 	@echo "  make clean              Remove build/"
 	@echo "  make distclean          Remove tudo"
+	@echo ""
+	@echo "Installation variables (customize with: make install BASE_DIR=...)"
+	@echo "  BASE_DIR                Base installation path (default: /usr/local)"
+	@echo "  BIN_DIR                 Binary path (default: BASE_DIR/bin)"
+	@echo "  CONFIG_DIR              Config path (default: /etc/smoothoperator)"
+	@echo "  LOG_DIR                 Log path (default: /var/log/smoothoperator)"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make install                                    # Default /usr/local/bin"
+	@echo "  make install BASE_DIR=/opt/radio               # Custom path"
+	@echo "  make install BASE_DIR=/opt/radio CONFIG_DIR=/etc/radio"
+	@echo "  make install-systemd BASE_DIR=/opt/radio       # With systemd"
 	@echo ""
