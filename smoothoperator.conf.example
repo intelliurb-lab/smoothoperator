@@ -1,0 +1,42 @@
+# SmoothOperator Configuration (non-secret)
+# Copy to smoothoperator.conf and customize.
+#
+# Passwords are NOT loaded from this file. Put RABBITMQ_PASS in one of:
+#   1. Environment variable (highest precedence)
+#   2. .env  (same directory)
+#   3. smoothoperator.env  (same directory)
+# See smoothoperator.env.example for the password file format.
+
+# RabbitMQ
+RABBITMQ_HOST=localhost
+RABBITMQ_PORT=5672
+RABBITMQ_USER=__REQUIRED_CHANGE_ME__
+RABBITMQ_VHOST=/
+
+# RabbitMQ TLS (optional, recommended for production — port 5671 for AMQPS)
+RABBITMQ_TLS_ENABLED=0
+# RABBITMQ_TLS_CA_CERT=/path/to/ca-cert.pem
+# RABBITMQ_TLS_CLIENT_CERT=/path/to/client-cert.pem
+# RABBITMQ_TLS_CLIENT_KEY=/path/to/client-key.pem
+RABBITMQ_TLS_VERIFY_PEER=1
+
+# Liquidsoap
+# Transport: 'telnet' (TCP, default) or 'socket' (Unix domain socket)
+LIQUIDSOAP_PROTOCOL=telnet
+
+# For telnet transport (required when LIQUIDSOAP_PROTOCOL=telnet)
+LIQUIDSOAP_HOST=127.0.0.1
+LIQUIDSOAP_PORT=1234
+
+# For socket transport (required when LIQUIDSOAP_PROTOCOL=socket)
+# LIQUIDSOAP_SOCKET_PATH=/var/run/liquidsoap/ls.sock
+
+LIQUIDSOAP_TIMEOUT_MS=3000
+LIQUIDSOAP_RECONNECT_MAX_DELAY_MS=30000
+
+# HTTP Health Check
+HTTP_HEALTHCHECK_PORT=9000
+
+# Logging
+LOG_LEVEL=INFO
+LOG_FILE=/var/log/smoothoperator.log

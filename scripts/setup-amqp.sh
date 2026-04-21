@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Setup RabbitMQ para Memphis
+# Setup RabbitMQ para SmoothOperator
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -31,7 +31,7 @@ else
 fi
 
 echo ""
-echo "==> After installing, create Memphis exchange and queue:"
+echo "==> After installing, create SmoothOperator exchange and queue:"
 echo ""
 echo "sudo rabbitmqctl add_user memphis memphis123"
 echo "sudo rabbitmqctl set_permissions -p / memphis '.*' '.*' '.*'"

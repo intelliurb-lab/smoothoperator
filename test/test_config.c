@@ -1,10 +1,21 @@
 #include <CUnit/CUnit.h>
 #include <CUnit/Basic.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include "config.h"
 
 static void setup_env_vars(void) {
+  /* Clear state that previous tests may have set, so each test starts
+   * from a known baseline. */
+  unsetenv("LIQUIDSOAP_PROTOCOL");
+  unsetenv("LIQUIDSOAP_SOCKET_PATH");
+  unsetenv("RABBITMQ_TLS_ENABLED");
+  unsetenv("RABBITMQ_TLS_CA_CERT");
+  unsetenv("RABBITMQ_TLS_CLIENT_CERT");
+  unsetenv("RABBITMQ_TLS_CLIENT_KEY");
+
   setenv("RABBITMQ_HOST", "localhost", 1);
   setenv("RABBITMQ_PORT", "5672", 1);
   setenv("RABBITMQ_USER", "testuser", 1);
@@ -173,6 +184,155 @@ void test_protocol_socket_path_too_long(void) {
   config_free(cfg);
 }
 
+/* Test: password shorter than 16 chars is rejected */
+void test_pass_too_short(void) {
+  setup_env_vars();
+  setenv("RABBITMQ_PASS", "short123", 1); /* 8 chars */
+  config_t *cfg = config_load(NULL);
+  CU_ASSERT_PTR_NOT_NULL(cfg);
+  CU_ASSERT_FALSE(config_is_valid(cfg));
+  config_free(cfg);
+}
+
+/* Test: password exactly 16 chars is accepted */
+void test_pass_min_length(void) {
+  setup_env_vars();
+  setenv("RABBITMQ_PASS", "0123456789abcdef", 1); /* 16 chars */
+  config_t *cfg = config_load(NULL);
+  CU_ASSERT_PTR_NOT_NULL(cfg);
+  CU_ASSERT_TRUE(config_is_valid(cfg));
+  config_free(cfg);
+}
+
+/* Test: non-numeric port rejected */
+void test_invalid_port_non_numeric(void) {
+  setup_env_vars();
+  setenv("RABBITMQ_PORT", "abc", 1);
+  config_t *cfg = config_load(NULL);
+  CU_ASSERT_PTR_NOT_NULL(cfg);
+  /* parse failure falls back to default=0 → config invalid */
+  CU_ASSERT_EQUAL(cfg->rabbitmq_port, 0);
+  CU_ASSERT_FALSE(config_is_valid(cfg));
+  config_free(cfg);
+}
+
+/* Test: port overflow (>65535) rejected */
+void test_invalid_port_overflow(void) {
+  setup_env_vars();
+  setenv("RABBITMQ_PORT", "70000", 1);
+  config_t *cfg = config_load(NULL);
+  CU_ASSERT_PTR_NOT_NULL(cfg);
+  CU_ASSERT_EQUAL(cfg->rabbitmq_port, 0);
+  CU_ASSERT_FALSE(config_is_valid(cfg));
+  config_free(cfg);
+}
+
+/* Test: negative port rejected (strtoul silent wrap) */
+void test_invalid_port_negative(void) {
+  setup_env_vars();
+  setenv("RABBITMQ_PORT", "-1", 1);
+  config_t *cfg = config_load(NULL);
+  CU_ASSERT_PTR_NOT_NULL(cfg);
+  CU_ASSERT_EQUAL(cfg->rabbitmq_port, 0);
+  CU_ASSERT_FALSE(config_is_valid(cfg));
+  config_free(cfg);
+}
+
+/* Test: invalid bool falls back to default (does not crash) */
+void test_invalid_bool_tls(void) {
+  setup_env_vars();
+  setenv("RABBITMQ_TLS_ENABLED", "maybe", 1);
+  config_t *cfg = config_load(NULL);
+  CU_ASSERT_PTR_NOT_NULL(cfg);
+  CU_ASSERT_FALSE(cfg->rabbitmq_tls_enabled); /* defaults to false */
+  config_free(cfg);
+  unsetenv("RABBITMQ_TLS_ENABLED");
+}
+
+/* Helper: write a temporary config file. Returns path (caller must unlink). */
+static char *write_tmp_conf(const char *content) {
+  char *path = strdup("/tmp/smoothop_test_XXXXXX.conf");
+  int fd = mkstemps(path, 5);
+  if (fd < 0) { free(path); return NULL; }
+  ssize_t wrote = write(fd, content, strlen(content));
+  close(fd);
+  if (wrote < 0 || (size_t)wrote != strlen(content)) {
+    unlink(path);
+    free(path);
+    return NULL;
+  }
+  return path;
+}
+
+/* Test: .conf file provides values when env is unset */
+void test_conf_file_loaded(void) {
+  /* Start from a clean slate — unset everything the .conf will set. */
+  unsetenv("RABBITMQ_HOST");
+  unsetenv("RABBITMQ_PORT");
+  unsetenv("RABBITMQ_USER");
+  setenv("RABBITMQ_PASS", "file_pass_16chars", 1); /* pass must come from env/env-file */
+  setenv("LIQUIDSOAP_HOST", "127.0.0.1", 1);
+  setenv("LIQUIDSOAP_PORT", "1234", 1);
+  setenv("LOG_FILE", "/tmp/smoothoperator.log", 1);
+
+  char *conf = write_tmp_conf(
+      "RABBITMQ_HOST=fromfile.example.com\n"
+      "RABBITMQ_PORT=5671\n"
+      "RABBITMQ_USER=fromfile_user\n");
+  CU_ASSERT_PTR_NOT_NULL_FATAL(conf);
+
+  config_t *cfg = config_load(conf);
+  CU_ASSERT_PTR_NOT_NULL_FATAL(cfg);
+  CU_ASSERT_STRING_EQUAL(cfg->rabbitmq_host, "fromfile.example.com");
+  CU_ASSERT_EQUAL(cfg->rabbitmq_port, 5671);
+  CU_ASSERT_STRING_EQUAL(cfg->rabbitmq_user, "fromfile_user");
+  config_free(cfg);
+  unlink(conf);
+  free(conf);
+}
+
+/* Test: env wins over .conf file */
+void test_env_wins_over_conf(void) {
+  setenv("RABBITMQ_HOST", "from_env", 1);
+  setenv("RABBITMQ_PORT", "5672", 1);
+  setenv("RABBITMQ_USER", "env_user", 1);
+  setenv("RABBITMQ_PASS", "env_pass_16chars!", 1);
+  setenv("LIQUIDSOAP_HOST", "127.0.0.1", 1);
+  setenv("LIQUIDSOAP_PORT", "1234", 1);
+  setenv("LOG_FILE", "/tmp/smoothoperator.log", 1);
+
+  char *conf = write_tmp_conf("RABBITMQ_HOST=from_file\n");
+  CU_ASSERT_PTR_NOT_NULL_FATAL(conf);
+
+  config_t *cfg = config_load(conf);
+  CU_ASSERT_PTR_NOT_NULL_FATAL(cfg);
+  CU_ASSERT_STRING_EQUAL(cfg->rabbitmq_host, "from_env");
+  config_free(cfg);
+  unlink(conf);
+  free(conf);
+}
+
+/* Test: RABBITMQ_PASS in .conf is filtered out (secrets not allowed in main conf) */
+void test_conf_filters_secrets(void) {
+  unsetenv("RABBITMQ_PASS");
+  setup_env_vars();
+  unsetenv("RABBITMQ_PASS"); /* setup_env sets it; undo */
+
+  char *conf = write_tmp_conf(
+      "RABBITMQ_PASS=leaked_from_conf_file_xx\n"
+      "RABBITMQ_HOST=conf_host\n");
+  CU_ASSERT_PTR_NOT_NULL_FATAL(conf);
+
+  config_t *cfg = config_load(conf);
+  CU_ASSERT_PTR_NOT_NULL_FATAL(cfg);
+  /* Password must NOT have been loaded from the .conf */
+  CU_ASSERT_PTR_NULL(cfg->rabbitmq_pass);
+  CU_ASSERT_FALSE(config_is_valid(cfg));
+  config_free(cfg);
+  unlink(conf);
+  free(conf);
+}
+
 /* Test: telnet with socket path set (invalid) */
 void test_protocol_telnet_with_socket_path(void) {
   setup_env_vars();
@@ -208,6 +368,16 @@ CU_pSuite suite_config(void) {
               test_protocol_socket_path_too_long);
   CU_add_test(pSuite, "protocol telnet with socket path",
               test_protocol_telnet_with_socket_path);
+  CU_add_test(pSuite, "pass too short", test_pass_too_short);
+  CU_add_test(pSuite, "pass min length (16)", test_pass_min_length);
+  CU_add_test(pSuite, "invalid port (non-numeric)",
+              test_invalid_port_non_numeric);
+  CU_add_test(pSuite, "invalid port (overflow)", test_invalid_port_overflow);
+  CU_add_test(pSuite, "invalid port (negative)", test_invalid_port_negative);
+  CU_add_test(pSuite, "invalid bool TLS", test_invalid_bool_tls);
+  CU_add_test(pSuite, "conf file loaded", test_conf_file_loaded);
+  CU_add_test(pSuite, "env wins over conf", test_env_wins_over_conf);
+  CU_add_test(pSuite, "conf filters secrets", test_conf_filters_secrets);
 
   return pSuite;
 }

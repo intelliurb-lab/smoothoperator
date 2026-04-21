@@ -7,6 +7,7 @@ CU_pSuite suite_message(void);
 CU_pSuite suite_config(void);
 CU_pSuite suite_liquidsoap_client(void);
 CU_pSuite suite_ls_controller(void);
+CU_pSuite suite_logging(void);
 
 int main(void) {
   if (CU_initialize_registry() != CUE_SUCCESS)
@@ -17,6 +18,7 @@ int main(void) {
   suite_config();
   suite_liquidsoap_client();
   suite_ls_controller();
+  suite_logging();
 
   /* Run all tests */
   CU_basic_set_mode(CU_BRM_VERBOSE);

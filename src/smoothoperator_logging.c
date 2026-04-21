@@ -7,8 +7,16 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <signal.h>
 
-static FILE *logfile = NULL;
+/* Log line is rendered into a buffer first, then written in a single
+ * write() call so two concurrent loggers cannot interleave, and so that
+ * SIGHUP-triggered fd swaps are safe (no stdio state to flush).
+ * Set by a signal handler; the next log_msg observes it and reopens. */
+volatile sig_atomic_t log_reopen_requested = 0;
+
+static int log_fd = -1;
+static char *log_path = NULL; /* NULL when logging to an inherited stream */
 static log_level_t log_level = LOG_INFO;
 
 static const char *level_names[] = {"DEBUG", "INFO", "WARN", "ERROR", "FATAL"};
@@ -37,37 +45,77 @@ static void json_escape_write(FILE *fp, const char *s) {
   fputc('"', fp);
 }
 
+static bool open_log_path(const char *path, int *out_fd) {
+  int fd = open(path, O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW | O_CLOEXEC,
+                0600);
+  if (fd < 0)
+    return false;
+  *out_fd = fd;
+  return true;
+}
+
+static void close_if_owned(int fd) {
+  if (fd >= 0 && fd != STDOUT_FILENO && fd != STDERR_FILENO)
+    close(fd);
+}
+
 void log_init(log_level_t level, const char *logfile_path) {
   log_level = level;
 
+  close_if_owned(log_fd);
+  log_fd = -1;
+  free(log_path);
+  log_path = NULL;
+
   if (!logfile_path || strcmp(logfile_path, "stdout") == 0) {
-    logfile = stdout;
+    log_fd = STDOUT_FILENO;
     return;
   }
 
-  int fd = open(logfile_path,
-                O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW | O_CLOEXEC,
-                0600);
-  if (fd < 0) {
+  int fd;
+  if (!open_log_path(logfile_path, &fd)) {
     fprintf(stderr, "ERROR: cannot open log file safely: %s\n",
             strerror(errno));
-    logfile = stderr;
+    log_fd = STDERR_FILENO;
     return;
   }
-  logfile = fdopen(fd, "a");
-  if (logfile == NULL) {
-    close(fd);
-    logfile = stderr;
+
+  log_path = strdup(logfile_path);
+  if (log_path == NULL) {
+    /* Without a remembered path SIGHUP reopen is a no-op; still usable. */
+    fprintf(stderr, "WARNING: cannot remember log path (OOM), reopen disabled\n");
   }
+  log_fd = fd;
+}
+
+static void reopen_if_requested(void) {
+  if (!log_reopen_requested)
+    return;
+  log_reopen_requested = 0;
+
+  if (log_path == NULL)
+    return; /* logging to stdout/stderr or path was not remembered */
+
+  int new_fd;
+  if (!open_log_path(log_path, &new_fd))
+    return; /* keep old fd if reopen fails */
+
+  int old_fd = log_fd;
+  log_fd = new_fd;
+  close_if_owned(old_fd);
 }
 
 void log_msg(log_level_t level, const char *module, const char *message,
              const char *event_id, const char *event_type) {
   if (level < log_level)
     return;
+  if ((int)level < 0 || (size_t)level >= sizeof(level_names) / sizeof(level_names[0]))
+    return;
 
-  if (logfile == NULL)
-    logfile = stdout;
+  reopen_if_requested();
+
+  if (log_fd < 0)
+    log_fd = STDOUT_FILENO;
 
   time_t now = time(NULL);
   struct tm tm_info;
@@ -75,33 +123,57 @@ void log_msg(log_level_t level, const char *module, const char *message,
   char timestamp[32];
   strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &tm_info);
 
-  fputs("{\"timestamp\":", logfile);
-  json_escape_write(logfile, timestamp);
-  fputs(",\"level\":", logfile);
-  json_escape_write(logfile, level_names[level]);
-  fputs(",\"module\":", logfile);
-  json_escape_write(logfile, module ? module : "unknown");
+  char *buf = NULL;
+  size_t len = 0;
+  FILE *mem = open_memstream(&buf, &len);
+  if (mem == NULL)
+    return;
+
+  fputs("{\"timestamp\":", mem);
+  json_escape_write(mem, timestamp);
+  fputs(",\"level\":", mem);
+  json_escape_write(mem, level_names[level]);
+  fputs(",\"module\":", mem);
+  json_escape_write(mem, module ? module : "unknown");
 
   if (message) {
-    fputs(",\"message\":", logfile);
-    json_escape_write(logfile, message);
+    fputs(",\"message\":", mem);
+    json_escape_write(mem, message);
   }
   if (event_id) {
-    fputs(",\"event_id\":", logfile);
-    json_escape_write(logfile, event_id);
+    fputs(",\"event_id\":", mem);
+    json_escape_write(mem, event_id);
   }
   if (event_type) {
-    fputs(",\"event_type\":", logfile);
-    json_escape_write(logfile, event_type);
+    fputs(",\"event_type\":", mem);
+    json_escape_write(mem, event_type);
   }
 
-  fputs("}\n", logfile);
-  fflush(logfile);
+  fputs("}\n", mem);
+  fclose(mem); /* flushes and finalizes buf/len */
+
+  if (buf != NULL && len > 0) {
+    const char *p = buf;
+    size_t remaining = len;
+    while (remaining > 0) {
+      ssize_t written = write(log_fd, p, remaining);
+      if (written < 0) {
+        if (errno == EINTR)
+          continue;
+        break; /* nothing we can do from here */
+      }
+      if (written == 0)
+        break;
+      p += written;
+      remaining -= (size_t)written;
+    }
+  }
+  free(buf);
 }
 
 void log_cleanup(void) {
-  if (logfile && logfile != stdout && logfile != stderr) {
-    fclose(logfile);
-  }
-  logfile = NULL;
+  close_if_owned(log_fd);
+  log_fd = -1;
+  free(log_path);
+  log_path = NULL;
 }

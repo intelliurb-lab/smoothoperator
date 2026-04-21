@@ -5,6 +5,9 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
+#include <stdarg.h>
+
+#define LS_CMD_MAX 2048
 
 struct controller {
   const config_t *cfg;
@@ -39,7 +42,7 @@ static bool payload_get_string(json_t *payload, const char *key,
 }
 
 static bool is_safe_ls_arg(const char *arg) {
-  if (arg == NULL || *arg == '\0' || strlen(arg) > 1024)
+  if (arg == NULL || *arg == '\0' || strlen(arg) > LS_CMD_MAX)
     return false;
   for (const char *p = arg; *p; p++) {
     unsigned char c = (unsigned char)*p;
@@ -68,6 +71,20 @@ static result_t send_command(controller_t *ctrl, const char *command) {
   return result;
 }
 
+static result_t send_command_fmt(controller_t *ctrl, const char *fmt, ...) {
+  char buf[LS_CMD_MAX];
+  va_list ap;
+  va_start(ap, fmt);
+  int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+  if (n < 0 || (size_t)n >= sizeof(buf)) {
+    log_msg(LOG_ERROR, "controller", "command too long or format error",
+            NULL, NULL);
+    return RESULT_INVALID;
+  }
+  return send_command(ctrl, buf);
+}
+
 static result_t handle_control_skip(controller_t *ctrl, json_t *payload) {
   (void)payload;
   return send_command(ctrl, "next");
@@ -85,12 +102,7 @@ static result_t handle_announcement_push(controller_t *ctrl, json_t *payload) {
   if (!is_safe_ls_arg(filepath))
     return RESULT_INVALID;
 
-  static char cmd_buf[2048];
-  int n = snprintf(cmd_buf, sizeof(cmd_buf), "announcements.push %s", filepath);
-  if (n < 0 || (size_t)n >= sizeof(cmd_buf))
-    return RESULT_INVALID;
-
-  return send_command(ctrl, cmd_buf);
+  return send_command_fmt(ctrl, "announcements.push %s", filepath);
 }
 
 static result_t handle_source_skip(controller_t *ctrl, json_t *payload) {
@@ -100,12 +112,7 @@ static result_t handle_source_skip(controller_t *ctrl, json_t *payload) {
   if (!is_valid_identifier(source))
     return RESULT_INVALID;
 
-  static char cmd_buf[512];
-  int n = snprintf(cmd_buf, sizeof(cmd_buf), "%s.skip", source);
-  if (n < 0 || (size_t)n >= sizeof(cmd_buf))
-    return RESULT_INVALID;
-
-  return send_command(ctrl, cmd_buf);
+  return send_command_fmt(ctrl, "%s.skip", source);
 }
 
 static result_t handle_source_metadata(controller_t *ctrl, json_t *payload) {
@@ -115,12 +122,7 @@ static result_t handle_source_metadata(controller_t *ctrl, json_t *payload) {
   if (!is_valid_identifier(source))
     return RESULT_INVALID;
 
-  static char cmd_buf[512];
-  int n = snprintf(cmd_buf, sizeof(cmd_buf), "%s.metadata", source);
-  if (n < 0 || (size_t)n >= sizeof(cmd_buf))
-    return RESULT_INVALID;
-
-  return send_command(ctrl, cmd_buf);
+  return send_command_fmt(ctrl, "%s.metadata", source);
 }
 
 static result_t handle_source_remaining(controller_t *ctrl, json_t *payload) {
@@ -130,12 +132,7 @@ static result_t handle_source_remaining(controller_t *ctrl, json_t *payload) {
   if (!is_valid_identifier(source))
     return RESULT_INVALID;
 
-  static char cmd_buf[512];
-  int n = snprintf(cmd_buf, sizeof(cmd_buf), "%s.remaining", source);
-  if (n < 0 || (size_t)n >= sizeof(cmd_buf))
-    return RESULT_INVALID;
-
-  return send_command(ctrl, cmd_buf);
+  return send_command_fmt(ctrl, "%s.remaining", source);
 }
 
 static result_t handle_request_push(controller_t *ctrl, json_t *payload) {
@@ -150,12 +147,7 @@ static result_t handle_request_push(controller_t *ctrl, json_t *payload) {
   if (!is_safe_ls_arg(uri))
     return RESULT_INVALID;
 
-  static char cmd_buf[2048];
-  int n = snprintf(cmd_buf, sizeof(cmd_buf), "%s.push %s", queue, uri);
-  if (n < 0 || (size_t)n >= sizeof(cmd_buf))
-    return RESULT_INVALID;
-
-  return send_command(ctrl, cmd_buf);
+  return send_command_fmt(ctrl, "%s.push %s", queue, uri);
 }
 
 static result_t handle_request_queue_list(controller_t *ctrl, json_t *payload) {
@@ -165,12 +157,7 @@ static result_t handle_request_queue_list(controller_t *ctrl, json_t *payload) {
   if (!is_valid_identifier(queue))
     return RESULT_INVALID;
 
-  static char cmd_buf[512];
-  int n = snprintf(cmd_buf, sizeof(cmd_buf), "%s.queue", queue);
-  if (n < 0 || (size_t)n >= sizeof(cmd_buf))
-    return RESULT_INVALID;
-
-  return send_command(ctrl, cmd_buf);
+  return send_command_fmt(ctrl, "%s.queue", queue);
 }
 
 static result_t handle_request_on_air(controller_t *ctrl, json_t *payload) {
@@ -193,12 +180,7 @@ static result_t handle_request_metadata(controller_t *ctrl, json_t *payload) {
   if (rid < 0)
     return RESULT_INVALID;
 
-  static char cmd_buf[512];
-  int n = snprintf(cmd_buf, sizeof(cmd_buf), "request.metadata %ld", (long)rid);
-  if (n < 0 || (size_t)n >= sizeof(cmd_buf))
-    return RESULT_INVALID;
-
-  return send_command(ctrl, cmd_buf);
+  return send_command_fmt(ctrl, "request.metadata %lld", (long long)rid);
 }
 
 static result_t handle_request_trace(controller_t *ctrl, json_t *payload) {
@@ -211,12 +193,7 @@ static result_t handle_request_trace(controller_t *ctrl, json_t *payload) {
   if (rid < 0)
     return RESULT_INVALID;
 
-  static char cmd_buf[512];
-  int n = snprintf(cmd_buf, sizeof(cmd_buf), "request.trace %ld", (long)rid);
-  if (n < 0 || (size_t)n >= sizeof(cmd_buf))
-    return RESULT_INVALID;
-
-  return send_command(ctrl, cmd_buf);
+  return send_command_fmt(ctrl, "request.trace %lld", (long long)rid);
 }
 
 static result_t handle_var_list(controller_t *ctrl, json_t *payload) {
@@ -231,12 +208,7 @@ static result_t handle_var_get(controller_t *ctrl, json_t *payload) {
   if (!is_valid_identifier(name))
     return RESULT_INVALID;
 
-  static char cmd_buf[512];
-  int n = snprintf(cmd_buf, sizeof(cmd_buf), "var.get %s", name);
-  if (n < 0 || (size_t)n >= sizeof(cmd_buf))
-    return RESULT_INVALID;
-
-  return send_command(ctrl, cmd_buf);
+  return send_command_fmt(ctrl, "var.get %s", name);
 }
 
 static result_t handle_var_set(controller_t *ctrl, json_t *payload) {
@@ -251,12 +223,7 @@ static result_t handle_var_set(controller_t *ctrl, json_t *payload) {
   if (!is_safe_ls_arg(value))
     return RESULT_INVALID;
 
-  static char cmd_buf[2048];
-  int n = snprintf(cmd_buf, sizeof(cmd_buf), "var.set %s = %s", name, value);
-  if (n < 0 || (size_t)n >= sizeof(cmd_buf))
-    return RESULT_INVALID;
-
-  return send_command(ctrl, cmd_buf);
+  return send_command_fmt(ctrl, "var.set %s = %s", name, value);
 }
 
 static result_t handle_output_start(controller_t *ctrl, json_t *payload) {
@@ -266,12 +233,7 @@ static result_t handle_output_start(controller_t *ctrl, json_t *payload) {
   if (!is_valid_identifier(output))
     return RESULT_INVALID;
 
-  static char cmd_buf[512];
-  int n = snprintf(cmd_buf, sizeof(cmd_buf), "%s.start", output);
-  if (n < 0 || (size_t)n >= sizeof(cmd_buf))
-    return RESULT_INVALID;
-
-  return send_command(ctrl, cmd_buf);
+  return send_command_fmt(ctrl, "%s.start", output);
 }
 
 static result_t handle_output_stop(controller_t *ctrl, json_t *payload) {
@@ -281,12 +243,7 @@ static result_t handle_output_stop(controller_t *ctrl, json_t *payload) {
   if (!is_valid_identifier(output))
     return RESULT_INVALID;
 
-  static char cmd_buf[512];
-  int n = snprintf(cmd_buf, sizeof(cmd_buf), "%s.stop", output);
-  if (n < 0 || (size_t)n >= sizeof(cmd_buf))
-    return RESULT_INVALID;
-
-  return send_command(ctrl, cmd_buf);
+  return send_command_fmt(ctrl, "%s.stop", output);
 }
 
 static result_t handle_playlist_reload(controller_t *ctrl, json_t *payload) {
@@ -296,12 +253,7 @@ static result_t handle_playlist_reload(controller_t *ctrl, json_t *payload) {
   if (!is_valid_identifier(playlist))
     return RESULT_INVALID;
 
-  static char cmd_buf[512];
-  int n = snprintf(cmd_buf, sizeof(cmd_buf), "%s.reload", playlist);
-  if (n < 0 || (size_t)n >= sizeof(cmd_buf))
-    return RESULT_INVALID;
-
-  return send_command(ctrl, cmd_buf);
+  return send_command_fmt(ctrl, "%s.reload", playlist);
 }
 
 static result_t handle_server_uptime(controller_t *ctrl, json_t *payload) {
@@ -333,12 +285,7 @@ static result_t handle_server_help(controller_t *ctrl, json_t *payload) {
   if (cmd == NULL || strlen(cmd) == 0 || !is_valid_identifier(cmd))
     return RESULT_INVALID;
 
-  static char cmd_buf[512];
-  int n = snprintf(cmd_buf, sizeof(cmd_buf), "help %s", cmd);
-  if (n < 0 || (size_t)n >= sizeof(cmd_buf))
-    return RESULT_INVALID;
-
-  return send_command(ctrl, cmd_buf);
+  return send_command_fmt(ctrl, "help %s", cmd);
 }
 
 typedef result_t (*event_handler_fn)(controller_t *, json_t *payload);

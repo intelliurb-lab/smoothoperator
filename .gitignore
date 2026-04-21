@@ -50,7 +50,7 @@ third_party/
 .env
 .env.local
 .env.*.local
-memphis.env
+smoothoperator.env
 *.pem
 *.key
 *.crt
@@ -78,7 +78,7 @@ docs/_build/
 site/
 
 # Executables
-memphis
-memphis_tests
+smoothoperator
+smoothoperator_tests
 build/bin/*
 !build/.gitkeep

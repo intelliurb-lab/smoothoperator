@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(smoothoperator
   VERSION 0.1.0
-  DESCRIPTION "Memphis - Intelliurb FM RabbitMQ Controller"
+  DESCRIPTION "SmoothOperator - Intelliurb FM RabbitMQ Controller"
   LANGUAGES C
 )
 
@@ -44,7 +44,7 @@ include_directories(${JANSSON_INCLUDE_DIRS})
 include_directories(${CUNIT_INCLUDE_DIRS})
 
 # Código-fonte principal
-set(MEMPHIS_SOURCES
+set(SMOOTHOP_SOURCES
   src/main.c
   src/config.c
   src/message.c
@@ -55,7 +55,7 @@ set(MEMPHIS_SOURCES
 )
 
 # Executável principal
-add_executable(smoothoperator ${MEMPHIS_SOURCES})
+add_executable(smoothoperator ${SMOOTHOP_SOURCES})
 target_link_libraries(smoothoperator
   ${LIBRABBITMQ_LIBRARIES}
   ${JANSSON_LIBRARIES}
@@ -71,14 +71,15 @@ set(TEST_SOURCES
   test/test_config.c
   test/test_liquidsoap_client.c
   test/test_ls_controller.c
+  test/test_logging.c
   # test/test_rabbitmq_consumer.c  # integração, roda separado
 )
 
 # Compilar sources sem main.c para testes
-list(REMOVE_ITEM MEMPHIS_SOURCES src/main.c)
+list(REMOVE_ITEM SMOOTHOP_SOURCES src/main.c)
 
 # Executável de testes
-add_executable(smoothoperator_tests ${TEST_SOURCES} ${MEMPHIS_SOURCES})
+add_executable(smoothoperator_tests ${TEST_SOURCES} ${SMOOTHOP_SOURCES})
 target_link_libraries(smoothoperator_tests
   ${LIBRABBITMQ_LIBRARIES}
   ${JANSSON_LIBRARIES}
@@ -88,7 +89,7 @@ target_link_libraries(smoothoperator_tests
 
 # Discovery automático de testes
 add_test(
-  NAME MemphisTests
+  NAME SmoothOperatorTests
   COMMAND smoothoperator_tests
 )
 

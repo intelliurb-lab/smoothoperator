@@ -65,7 +65,7 @@ make test       # Verify: 18/18 tests pass
 
 ```bash
 # Copy config template
-cp conf/smoothoperator.env .env
+cp smoothoperator.env.example .env
 
 # Edit .env with your settings
 nano .env
@@ -76,7 +76,7 @@ nano .env
 RABBITMQ_HOST=127.0.0.1
 RABBITMQ_PORT=5672
 RABBITMQ_USER=memphis
-RABBITMQ_PASS=your_strong_password_here_min_12_chars
+RABBITMQ_PASS=your_strong_password_here_min_16_chars
 LOG_FILE=/var/log/smoothoperator.log
 LOG_LEVEL=INFO
 ```

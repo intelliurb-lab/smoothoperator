@@ -11,7 +11,8 @@ BASE_DIR ?= /usr/local
 BIN_DIR ?= $(BASE_DIR)/bin
 CONFIG_DIR ?= /etc/smoothoperator
 LOG_DIR ?= /var/log/smoothoperator
-CONFIG_FILE ?= $(CONFIG_DIR)/smoothoperator.env
+CONFIG_FILE ?= $(CONFIG_DIR)/smoothoperator.conf
+SECRETS_FILE ?= $(CONFIG_DIR)/smoothoperator.env
 
 # Configurações
 CMAKE := cmake
@@ -127,16 +128,25 @@ install: release
 	@read -p "Proceed? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
 	@mkdir -p $(BIN_DIR) $(CONFIG_DIR) $(LOG_DIR)
 	@install -D -m 755 $(BUILD_DIR)/smoothoperator $(BIN_DIR)/smoothoperator
-	@install -D -m 640 smoothoperator.env.example $(CONFIG_FILE).example
+	@install -D -m 644 smoothoperator.conf.example $(CONFIG_FILE).example
+	@install -D -m 600 smoothoperator.env.example $(SECRETS_FILE).example
 	@if [ ! -f $(CONFIG_FILE) ]; then \
 		cp $(CONFIG_FILE).example $(CONFIG_FILE); \
-		chmod 640 $(CONFIG_FILE); \
+		chmod 644 $(CONFIG_FILE); \
 		echo "✓ Config template copied to $(CONFIG_FILE)"; \
 	else \
-		echo "⚠ Config file exists, template saved as $(CONFIG_FILE).example"; \
+		echo "⚠ Config exists, template saved as $(CONFIG_FILE).example"; \
+	fi
+	@if [ ! -f $(SECRETS_FILE) ]; then \
+		cp $(SECRETS_FILE).example $(SECRETS_FILE); \
+		chmod 600 $(SECRETS_FILE); \
+		echo "✓ Secrets template copied to $(SECRETS_FILE)"; \
+	else \
+		echo "⚠ Secrets exist, template saved as $(SECRETS_FILE).example"; \
 	fi
 	@echo "✓ Instalado em $(BIN_DIR)/smoothoperator"
 	@echo "✓ Config em $(CONFIG_FILE) (edit before starting)"
+	@echo "✓ Secrets em $(SECRETS_FILE) (edit before starting, mode 600)"
 	@echo "✓ Log dir: $(LOG_DIR)"
 
 install-systemd: install
@@ -152,9 +162,9 @@ install-systemd: install
 	@echo 'Type=simple' >> scripts/smoothoperator.service.tmp
 	@echo 'User=root' >> scripts/smoothoperator.service.tmp
 	@echo 'Group=root' >> scripts/smoothoperator.service.tmp
-	@echo 'WorkingDirectory=$(BASE_DIR)' >> scripts/smoothoperator.service.tmp
-	@echo 'EnvironmentFile=$(CONFIG_FILE)' >> scripts/smoothoperator.service.tmp
-	@echo 'ExecStart=$(BIN_DIR)/smoothoperator' >> scripts/smoothoperator.service.tmp
+	@echo 'WorkingDirectory=$(CONFIG_DIR)' >> scripts/smoothoperator.service.tmp
+	@echo 'EnvironmentFile=$(SECRETS_FILE)' >> scripts/smoothoperator.service.tmp
+	@echo 'ExecStart=$(BIN_DIR)/smoothoperator -c $(CONFIG_FILE)' >> scripts/smoothoperator.service.tmp
 	@echo 'Restart=on-failure' >> scripts/smoothoperator.service.tmp
 	@echo 'RestartSec=10' >> scripts/smoothoperator.service.tmp
 	@echo 'StandardOutput=journal' >> scripts/smoothoperator.service.tmp

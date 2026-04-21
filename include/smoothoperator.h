@@ -1,13 +1,13 @@
-#ifndef MEMPHIS_H
-#define MEMPHIS_H
+#ifndef SMOOTHOP_H
+#define SMOOTHOP_H
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <time.h>
 
 /* Version */
-#define MEMPHIS_VERSION "0.1.0"
-#define MEMPHIS_NAME "smoothoperator"
+#define SMOOTHOP_VERSION "0.1.0"
+#define SMOOTHOP_NAME "smoothoperator"
 
 /* Log levels */
 typedef enum {
@@ -39,4 +39,4 @@ void log_msg(log_level_t level, const char *module, const char *message,
              const char *event_id, const char *event_type);
 void log_cleanup(void);
 
-#endif /* MEMPHIS_H */
+#endif /* SMOOTHOP_H */

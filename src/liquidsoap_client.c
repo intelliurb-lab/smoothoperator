@@ -30,7 +30,7 @@ static bool is_safe_ls_arg(const char *arg) {
   if (arg == NULL)
     return false;
   size_t len = strlen(arg);
-  if (len == 0 || len > 1024)
+  if (len == 0 || len > 2048)
     return false;
 
   for (const char *p = arg; *p; p++) {
@@ -82,23 +82,55 @@ static bool telnet_connect(ls_socket_t *sock) {
   return true;
 }
 
-static bool unix_socket_connect(ls_socket_t *sock) {
+/* Validate a Unix socket path: no symlinks, is a socket, not world-writable,
+ * owned by us or root, and sitting in a directory that is either not
+ * world-writable or has the sticky bit set. A TOCTOU window remains between
+ * validation and connect() — these checks minimize it by tightening what an
+ * attacker can swap in. */
+static bool unix_socket_path_is_safe(const char *path) {
   struct stat st;
-  struct sockaddr_un addr;
-
-  if (lstat(sock->socket_path, &st) < 0)
+  if (lstat(path, &st) < 0)
     return false;
-
   if (S_ISLNK(st.st_mode))
     return false;
-
-  if (stat(sock->socket_path, &st) < 0)
-    return false;
-
   if (!S_ISSOCK(st.st_mode))
     return false;
-
   if ((st.st_mode & S_IWOTH) != 0)
+    return false;
+
+  uid_t euid = geteuid();
+  if (st.st_uid != euid && st.st_uid != 0)
+    return false;
+
+  char dir_path[128];
+  size_t plen = strlen(path);
+  if (plen >= sizeof(dir_path))
+    return false;
+  memcpy(dir_path, path, plen + 1);
+
+  char *slash = strrchr(dir_path, '/');
+  if (slash == NULL)
+    return false;
+  if (slash == dir_path)
+    dir_path[1] = '\0'; /* root: "/" */
+  else
+    *slash = '\0';
+
+  struct stat dst;
+  if (stat(dir_path, &dst) < 0)
+    return false;
+  if (!S_ISDIR(dst.st_mode))
+    return false;
+  if ((dst.st_mode & S_IWOTH) != 0 && (dst.st_mode & S_ISVTX) == 0)
+    return false;
+
+  return true;
+}
+
+static bool unix_socket_connect(ls_socket_t *sock) {
+  struct sockaddr_un addr;
+
+  if (!unix_socket_path_is_safe(sock->socket_path))
     return false;
 
   sock->fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
@@ -291,6 +323,11 @@ static char *ls_recv_line(int fd, size_t max_len) {
   return NULL;
 }
 
+/* Receive a Liquidsoap response: zero or more data lines, then a line
+ * containing exactly "END". Returns a malloc'd string (may be empty) with
+ * data lines joined by '\n' and *out_ok=true on success. Returns NULL on
+ * I/O error, truncation, or too many lines — in which case the caller
+ * should treat the connection as broken. */
 static char *ls_recv_response(int fd, bool *out_ok) {
   const size_t MAX_BODY_BYTES = 64 * 1024;
   const size_t MAX_LINE_BYTES = 4 * 1024;
@@ -299,9 +336,11 @@ static char *ls_recv_response(int fd, bool *out_ok) {
   if (fd < 0 || out_ok == NULL)
     return NULL;
 
+  *out_ok = false;
+
   char *body = NULL;
   size_t body_len = 0;
-  char *first_line = NULL;
+  bool complete = false;
 
   for (int i = 0; i < MAX_LINES; i++) {
     char *line = ls_recv_line(fd, MAX_LINE_BYTES);
@@ -312,52 +351,51 @@ static char *ls_recv_response(int fd, bool *out_ok) {
 
     if (strcmp(line, "END") == 0) {
       free(line);
+      complete = true;
       break;
     }
 
-    if (i == 0) {
-      first_line = strdup(line);
-    }
-
-    if (body_len + strlen(line) + 1 > MAX_BODY_BYTES) {
+    size_t line_len = strlen(line);
+    size_t sep = (body_len > 0) ? 1 : 0; /* join with '\n' */
+    if (body_len + sep + line_len + 1 > MAX_BODY_BYTES) {
       free(line);
       free(body);
-      free(first_line);
       return NULL;
     }
 
-    if (body_len > 0) {
-      char *new_body = realloc(body, body_len + strlen(line) + 2);
-      if (new_body == NULL) {
-        free(line);
-        free(body);
-        free(first_line);
-        return NULL;
-      }
-      body = new_body;
-      body[body_len++] = '\n';
-    } else {
-      body = malloc(strlen(line) + 1);
-      if (body == NULL) {
-        free(line);
-        free(first_line);
-        return NULL;
-      }
+    char *new_body = realloc(body, body_len + sep + line_len + 1);
+    if (new_body == NULL) {
+      free(line);
+      free(body);
+      return NULL;
     }
+    body = new_body;
 
-    strcpy(body + body_len, line);
-    body_len += strlen(line);
+    if (sep)
+      body[body_len++] = '\n';
+    memcpy(body + body_len, line, line_len);
+    body_len += line_len;
+    body[body_len] = '\0';
     free(line);
   }
 
-  if (first_line != NULL) {
-    *out_ok = (strncmp(first_line, "OK", 2) == 0 ||
-               strncmp(first_line, "Done", 4) == 0);
-    free(first_line);
-  } else {
-    *out_ok = false;
+  if (!complete) {
+    free(body);
+    return NULL;
   }
 
+  /* Empty response (just "END") — success with empty body. */
+  if (body == NULL) {
+    body = calloc(1, 1);
+    if (body == NULL)
+      return NULL;
+  }
+
+  /* Liquidsoap reports unknown/malformed commands with well-known prefixes.
+   * Anything else (including arbitrary data from getters like var.get) is
+   * treated as a successful response. */
+  *out_ok = !(strncmp(body, "ERROR", 5) == 0 ||
+              strncmp(body, "Bad command", 11) == 0);
   return body;
 }
 
@@ -377,20 +415,41 @@ ls_response_t *ls_send_command(ls_socket_t *sock, const char *command) {
   if (resp == NULL)
     return NULL;
 
-  time_t start = time(NULL);
+  struct timespec t_start;
+  clock_gettime(CLOCK_MONOTONIC, &t_start);
 
-  char cmd_buf[1024];
-  int n = snprintf(cmd_buf, sizeof(cmd_buf), "%s\n", command);
-  if (n < 0 || (size_t)n >= sizeof(cmd_buf)) {
+  size_t cmd_len = strlen(command);
+  char *cmd_buf = malloc(cmd_len + 2);
+  if (cmd_buf == NULL) {
     free(resp);
     return NULL;
   }
+  memcpy(cmd_buf, command, cmd_len);
+  cmd_buf[cmd_len] = '\n';
+  cmd_buf[cmd_len + 1] = '\0';
 
-  if (write(sock->fd, cmd_buf, (size_t)n) != n) {
-    free(resp);
-    sock->connected = false;
-    return NULL;
+  size_t remaining = cmd_len + 1;
+  const char *p = cmd_buf;
+  while (remaining > 0) {
+    ssize_t written = write(sock->fd, p, remaining);
+    if (written < 0) {
+      if (errno == EINTR)
+        continue;
+      free(cmd_buf);
+      free(resp);
+      sock->connected = false;
+      return NULL;
+    }
+    if (written == 0) {
+      free(cmd_buf);
+      free(resp);
+      sock->connected = false;
+      return NULL;
+    }
+    p += written;
+    remaining -= (size_t)written;
   }
+  free(cmd_buf);
 
   bool ok = false;
   char *body = ls_recv_response(sock->fd, &ok);
@@ -400,8 +459,14 @@ ls_response_t *ls_send_command(ls_socket_t *sock, const char *command) {
     return NULL;
   }
 
-  time_t end = time(NULL);
-  resp->latency_ms = (uint32_t)((end - start) * 1000);
+  struct timespec t_end;
+  clock_gettime(CLOCK_MONOTONIC, &t_end);
+  uint64_t elapsed_ns =
+      ((uint64_t)t_end.tv_sec * 1000000000ULL + (uint64_t)t_end.tv_nsec) -
+      ((uint64_t)t_start.tv_sec * 1000000000ULL + (uint64_t)t_start.tv_nsec);
+  uint64_t elapsed_ms = elapsed_ns / 1000000ULL;
+  resp->latency_ms =
+      (elapsed_ms > UINT32_MAX) ? UINT32_MAX : (uint32_t)elapsed_ms;
   resp->ok = ok;
   resp->body = body;
   resp->body_len = strlen(body);
