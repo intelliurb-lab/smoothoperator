@@ -383,7 +383,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
 | TLS Support | 🟡 Configurable |
 | HTTP Health Check | ⏳ Planned v0.2 |
 
-**Version:** 0.1.0 | **Last Updated:** 2026-04-20
+**Version:** 0.2.0 | **Last Updated:** 2026-04-22
 
 ---
 

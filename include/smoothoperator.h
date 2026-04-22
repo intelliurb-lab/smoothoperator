@@ -6,7 +6,7 @@
 #include <time.h>
 
 /* Version */
-#define SMOOTHOP_VERSION "0.1.0"
+#define SMOOTHOP_VERSION "0.2.0"
 #define SMOOTHOP_NAME "smoothoperator"
 
 /* Log levels */
