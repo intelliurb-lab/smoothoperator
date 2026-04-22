@@ -364,6 +364,10 @@ bool controller_is_healthy(const controller_t *ctrl) {
   return ctrl && ctrl->healthy && ls_is_connected(ctrl->ls_sock);
 }
 
+ls_socket_t *controller_get_socket(const controller_t *ctrl) {
+  return (ctrl != NULL) ? ctrl->ls_sock : NULL;
+}
+
 void controller_free(controller_t *ctrl) {
   if (ctrl == NULL)
     return;

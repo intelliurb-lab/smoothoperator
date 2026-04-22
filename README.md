@@ -255,7 +255,38 @@ EOF
 **Server Introspection:**
 - `server.uptime`, `server.version`, `server.list`, `server.help`
 
+**State Events (published by producer):**
+- `state.playlist_changed` — Emitted when current playlist variable changes
+- `state.current_song` — Emitted when currently on-air track changes
+
 See [docs/API.md](docs/API.md) for full event schemas and payload validation rules.
+
+---
+
+## 🔄 State Publishing (Producer)
+
+In addition to consuming commands, SmoothOperator now actively publishes state changes from Liquidsoap:
+
+```
+Liquidsoap (state variables)
+        ↓ (poll every 5s)
+   SmoothOperator
+        ↓ (publish on change)
+   RabbitMQ (ls.events exchange)
+        ↓ (consume downstream)
+   Your app
+```
+
+**Currently monitored:**
+- `var.get current_playlist` → Published as `state.playlist_changed` 
+- `request.on_air` → Published as `state.current_song`
+
+To consume these events, bind to the `radio.events` exchange with routing key `state.*`:
+
+```bash
+rabbitmqctl declare_queue smoothoperator.state --durable
+rabbitmqctl bind_queue smoothoperator.state radio.events 'state.*'
+```
 
 ---
 

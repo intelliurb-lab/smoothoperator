@@ -14,11 +14,13 @@
 #include <sys/types.h>
 #include <sys/resource.h>
 #include <sys/prctl.h>
+#include <pthread.h>
 
 #include "smoothoperator.h"
 #include "config.h"
 #include "ls_controller.h"
 #include "rabbitmq_consumer.h"
+#include "rabbitmq_producer.h"
 
 static volatile sig_atomic_t shutdown_requested = 0;
 extern volatile sig_atomic_t log_reopen_requested;
@@ -49,6 +51,20 @@ static void setup_signals(void) {
 
   sa.sa_handler = SIG_IGN;
   sigaction(SIGPIPE, &sa, NULL);
+}
+
+struct producer_thread_args {
+  rabbitmq_producer_t *producer;
+  volatile sig_atomic_t *shutdown_flag;
+};
+
+static void *producer_thread_fn(void *arg) {
+  struct producer_thread_args *args = (struct producer_thread_args *)arg;
+  if (args == NULL || args->producer == NULL)
+    return NULL;
+
+  rabbitmq_producer_run(args->producer, args->shutdown_flag);
+  return NULL;
 }
 
 static bool drop_privileges(const char *username) {
@@ -221,12 +237,40 @@ int main(int argc, char *argv[]) {
     log_cleanup();
     return 1;
   }
+
+  /* Create producer for state events */
+  rabbitmq_producer_t *producer = rabbitmq_producer_create(cfg, ctrl);
+  if (producer == NULL) {
+    log_msg(LOG_WARN, "main", "Failed to create RabbitMQ producer (state polling disabled)", NULL,
+            NULL);
+  }
+
   log_msg(LOG_INFO, "main", "SmoothOperator started successfully", NULL, NULL);
+
+  /* Start producer in a background thread */
+  pthread_t producer_tid = 0;
+  if (producer != NULL) {
+    struct producer_thread_args args = {
+        .producer = producer,
+        .shutdown_flag = &shutdown_requested,
+    };
+    if (pthread_create(&producer_tid, NULL, producer_thread_fn, &args) != 0) {
+      log_msg(LOG_WARN, "main", "Failed to create producer thread", NULL, NULL);
+      rabbitmq_producer_free(producer);
+      producer = NULL;
+    }
+    pthread_detach(producer_tid);
+  }
 
   /* Main loop: consumer runs until shutdown (signal sets the flag) */
   rabbitmq_consumer_run(consumer, &shutdown_requested);
 
   /* Cleanup */
+  if (producer != NULL) {
+    rabbitmq_producer_shutdown(producer);
+    usleep(100000);
+    rabbitmq_producer_free(producer);
+  }
   rabbitmq_consumer_free(consumer);
   controller_free(ctrl);
   config_free(cfg);

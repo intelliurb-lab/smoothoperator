@@ -16,6 +16,9 @@ result_t controller_handle_event(controller_t *ctrl, const message_t *msg);
 /* Health check */
 bool controller_is_healthy(const controller_t *ctrl);
 
+/* Get Liquidsoap socket (borrowed; do not free) */
+struct ls_socket *controller_get_socket(const controller_t *ctrl);
+
 /* Cleanup */
 void controller_free(controller_t *ctrl);
 

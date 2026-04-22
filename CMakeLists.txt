@@ -50,6 +50,7 @@ set(SMOOTHOP_SOURCES
   src/message.c
   src/liquidsoap_client.c
   src/rabbitmq_consumer.c
+  src/rabbitmq_producer.c
   src/ls_controller.c
   src/smoothoperator_logging.c
 )
@@ -59,6 +60,7 @@ add_executable(smoothoperator ${SMOOTHOP_SOURCES})
 target_link_libraries(smoothoperator
   ${LIBRABBITMQ_LIBRARIES}
   ${JANSSON_LIBRARIES}
+  pthread
   m
 )
 
@@ -84,6 +86,7 @@ target_link_libraries(smoothoperator_tests
   ${LIBRABBITMQ_LIBRARIES}
   ${JANSSON_LIBRARIES}
   ${CUNIT_LIBRARIES}
+  pthread
   m
 )
 
