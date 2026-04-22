@@ -7,10 +7,10 @@ TEST_DIR := test
 INCLUDE_DIR := include
 
 # Installation directories (customize with: make install BASE_DIR=/opt/radio)
-BASE_DIR ?= /usr/local
+BASE_DIR ?= /opt/radio
 BIN_DIR ?= $(BASE_DIR)/bin
-CONFIG_DIR ?= /etc/smoothoperator
-LOG_DIR ?= /var/log/smoothoperator
+CONFIG_DIR ?= opt/radio/conf/smoothoperator
+LOG_DIR ?= /opt/radio/log/smoothoperator
 CONFIG_FILE ?= $(CONFIG_DIR)/smoothoperator.conf
 SECRETS_FILE ?= $(CONFIG_DIR)/smoothoperator.env
 

@@ -77,6 +77,9 @@ RABBITMQ_HOST=127.0.0.1
 RABBITMQ_PORT=5672
 RABBITMQ_USER=memphis
 RABBITMQ_PASS=your_strong_password_here_min_16_chars
+RABBITMQ_VHOST=/
+RABBITMQ_QUEUE_NAME=smoothoperator.events
+RABBITMQ_EXCHANGE_NAME=radio.events
 LOG_FILE=/var/log/smoothoperator.log
 LOG_LEVEL=INFO
 ```
@@ -96,6 +99,95 @@ LIQUIDSOAP_PROTOCOL=socket
 LIQUIDSOAP_SOCKET_PATH=/var/run/liquidsoap/ls.sock
 ```
 
+### RabbitMQ Setup
+
+SmoothOperator requires a pre-configured RabbitMQ exchange and queue with binding rules. Follow these steps:
+
+#### 1. Start RabbitMQ
+
+```bash
+docker run -d --name rabbitmq \
+  -p 5672:5672 \
+  -p 15672:15672 \
+  -e RABBITMQ_DEFAULT_USER=memphis \
+  -e RABBITMQ_DEFAULT_PASS=your_strong_password_here_min_16_chars \
+  rabbitmq:3-management
+```
+
+Access the management UI at `http://localhost:15672` (default: guest/guest)
+
+#### 2. Create the Exchange
+
+Using the Management UI:
+1. Go to **Admin** → **Exchanges**
+2. Click **Add a new exchange**
+3. Name: `radio.events`
+4. Type: `topic`
+5. Durability: **Durable** ✓
+6. Click **Add exchange**
+
+Or via command line:
+```bash
+docker exec rabbitmq rabbitmqctl declare_exchange radio.events topic --durable
+```
+
+#### 3. Create the Queue
+
+Using the Management UI:
+1. Go to **Admin** → **Queues**
+2. Click **Add a new queue**
+3. Name: `smoothoperator.events`
+4. Durability: **Durable** ✓
+5. Click **Add queue**
+
+Or via command line:
+```bash
+docker exec rabbitmq rabbitmqctl declare_queue smoothoperator.events --durable
+```
+
+#### 4. Bind Queue to Exchange
+
+The queue must bind to the exchange with routing key patterns. SmoothOperator subscribes to:
+- `control.*` — Control events (skip, shutdown, etc.)
+- `announcement.*` — Announcements
+- `source.*` — Source control
+- `request.*` — Request queue management
+- `var.*` — Variable management
+- `output.*` — Output control
+- `playlist.*` — Playlist management
+- `server.*` — Server introspection
+
+Using the Management UI:
+1. Go to **Admin** → **Exchanges** → `radio.events`
+2. Under **Bindings**, click **Add binding**
+3. To queue: `smoothoperator.events`
+4. Routing key: `control.*` → Click **Bind**
+5. Repeat for each pattern: `announcement.*`, `source.*`, `request.*`, `var.*`, `output.*`, `playlist.*`, `server.*`
+
+Or via command line:
+```bash
+docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'control.*'
+docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'announcement.*'
+docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'source.*'
+docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'request.*'
+docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'var.*'
+docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'output.*'
+docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'playlist.*'
+docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'server.*'
+```
+
+#### 5. Verify Configuration
+
+```bash
+docker exec rabbitmq rabbitmqctl list_exchanges
+docker exec rabbitmq rabbitmqctl list_queues
+docker exec rabbitmq rabbitmqctl list_bindings
+```
+
+You should see:
+- Exchange: `radio.events` (type: topic, durable)
+- Queue: `smoothoperator.events` (durable)
+- 8 bindings between them with the routing key patterns
 ### Run
 
 ```bash

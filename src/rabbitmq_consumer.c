@@ -13,8 +13,6 @@
 
 #define AMQP_CONN_FRAME_SIZE 131072
 #define AMQP_CONN_HEARTBEAT 30
-#define AMQP_QUEUE_NAME "ls.commands"
-#define AMQP_EXCHANGE_NAME "radio.events"
 
 /* Routing keys bound to the queue (matches docs/API.md). */
 static const char *ROUTING_KEYS[] = {
@@ -126,8 +124,10 @@ static bool setup_amqp_socket(rabbitmq_consumer_t *consumer) {
 }
 
 static bool declare_topology(rabbitmq_consumer_t *consumer) {
+  const config_t *cfg = consumer->cfg;
+
   amqp_exchange_declare(consumer->conn, consumer->channel,
-                        amqp_cstring_bytes(AMQP_EXCHANGE_NAME),
+                        amqp_cstring_bytes(cfg->rabbitmq_exchange_name),
                         amqp_cstring_bytes("topic"),
                         0, /* passive */
                         1, /* durable */
@@ -139,7 +139,7 @@ static bool declare_topology(rabbitmq_consumer_t *consumer) {
     return false;
 
   amqp_queue_declare(consumer->conn, consumer->channel,
-                     amqp_cstring_bytes(AMQP_QUEUE_NAME),
+                     amqp_cstring_bytes(cfg->rabbitmq_queue_name),
                      0, /* passive */
                      1, /* durable */
                      0, /* exclusive */
@@ -151,8 +151,8 @@ static bool declare_topology(rabbitmq_consumer_t *consumer) {
 
   for (int i = 0; ROUTING_KEYS[i] != NULL; i++) {
     amqp_queue_bind(consumer->conn, consumer->channel,
-                    amqp_cstring_bytes(AMQP_QUEUE_NAME),
-                    amqp_cstring_bytes(AMQP_EXCHANGE_NAME),
+                    amqp_cstring_bytes(cfg->rabbitmq_queue_name),
+                    amqp_cstring_bytes(cfg->rabbitmq_exchange_name),
                     amqp_cstring_bytes(ROUTING_KEYS[i]), amqp_empty_table);
     if (!amqp_reply_ok(amqp_get_rpc_reply(consumer->conn),
                        "queue_bind failed"))
@@ -160,7 +160,7 @@ static bool declare_topology(rabbitmq_consumer_t *consumer) {
   }
 
   amqp_basic_consume(consumer->conn, consumer->channel,
-                     amqp_cstring_bytes(AMQP_QUEUE_NAME), amqp_empty_bytes,
+                     amqp_cstring_bytes(cfg->rabbitmq_queue_name), amqp_empty_bytes,
                      0, /* no_local */
                      0, /* no_ack — we ack manually */
                      0, /* exclusive */

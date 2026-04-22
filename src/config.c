@@ -201,6 +201,8 @@ config_t *config_load(const char *config_file) {
   cfg->rabbitmq_user = get_config_string("RABBITMQ_USER", NULL);
   cfg->rabbitmq_pass = get_config_string("RABBITMQ_PASS", NULL);
   cfg->rabbitmq_vhost = get_config_string("RABBITMQ_VHOST", "/");
+  cfg->rabbitmq_queue_name = get_config_string("RABBITMQ_QUEUE_NAME", "smoothoperator.events");
+  cfg->rabbitmq_exchange_name = get_config_string("RABBITMQ_EXCHANGE_NAME", "radio.events");
 
   /* TLS configuration (optional, but recommended for production) */
   cfg->rabbitmq_tls_enabled = get_config_bool("RABBITMQ_TLS_ENABLED", false);
@@ -293,6 +295,16 @@ bool config_is_valid(const config_t *cfg) {
     return false;
   }
 
+  if (cfg->rabbitmq_queue_name == NULL || strlen(cfg->rabbitmq_queue_name) == 0) {
+    fprintf(stderr, "ERROR: RABBITMQ_QUEUE_NAME must be set\n");
+    return false;
+  }
+
+  if (cfg->rabbitmq_exchange_name == NULL || strlen(cfg->rabbitmq_exchange_name) == 0) {
+    fprintf(stderr, "ERROR: RABBITMQ_EXCHANGE_NAME must be set\n");
+    return false;
+  }
+
   return true;
 }
 
@@ -311,6 +323,10 @@ void config_free(config_t *cfg) {
   }
   if (cfg->rabbitmq_vhost)
     free(cfg->rabbitmq_vhost);
+  if (cfg->rabbitmq_queue_name)
+    free(cfg->rabbitmq_queue_name);
+  if (cfg->rabbitmq_exchange_name)
+    free(cfg->rabbitmq_exchange_name);
   if (cfg->rabbitmq_tls_ca_cert)
     free(cfg->rabbitmq_tls_ca_cert);
   if (cfg->rabbitmq_tls_client_cert)

@@ -15,6 +15,8 @@ typedef struct {
   char *rabbitmq_user;
   char *rabbitmq_pass;
   char *rabbitmq_vhost;
+  char *rabbitmq_queue_name;
+  char *rabbitmq_exchange_name;
   bool rabbitmq_tls_enabled;
   char *rabbitmq_tls_ca_cert;
   char *rabbitmq_tls_client_cert;
