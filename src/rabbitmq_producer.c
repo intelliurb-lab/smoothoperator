@@ -22,7 +22,7 @@ struct rabbitmq_producer {
   amqp_channel_t channel;
   const config_t *cfg;
   controller_t *controller;
-  bool running;
+  volatile sig_atomic_t running;
   bool connected;
   bool channel_open;
 
@@ -85,6 +85,7 @@ static bool setup_amqp_socket(rabbitmq_producer_t *producer) {
       if (amqp_ssl_socket_set_cacert(socket, cfg->rabbitmq_tls_ca_cert) !=
           AMQP_STATUS_OK) {
         log_msg(LOG_ERROR, "rabbitmq_producer", "TLS: set_cacert failed", NULL, NULL);
+        /* Socket cleanup deferred to amqp_destroy_connection via setup_amqp_connection error path */
         return false;
       }
     } else if (cfg->rabbitmq_tls_verify_peer) {
@@ -278,6 +279,13 @@ static void poll_playlist_state(rabbitmq_producer_t *producer) {
     char *new_playlist = safe_strdup(resp->body);
     if (strings_differ(producer->prev_playlist, new_playlist)) {
       json_t *payload = json_object();
+      if (payload == NULL) {
+        log_msg(LOG_WARN, "rabbitmq_producer", "json_object failed (OOM)", NULL, NULL);
+        free(new_playlist);
+        ls_response_free(resp);
+        return;
+      }
+
       json_object_set_new(payload, "playlist", json_string(new_playlist ? new_playlist : ""));
       char *json_str = json_dumps(payload, JSON_COMPACT);
       if (json_str != NULL) {
@@ -311,6 +319,13 @@ static void poll_current_song(rabbitmq_producer_t *producer) {
     char *new_song = safe_strdup(resp->body);
     if (strings_differ(producer->prev_current_song, new_song)) {
       json_t *payload = json_object();
+      if (payload == NULL) {
+        log_msg(LOG_WARN, "rabbitmq_producer", "json_object failed (OOM)", NULL, NULL);
+        free(new_song);
+        ls_response_free(resp);
+        return;
+      }
+
       json_object_set_new(payload, "song", json_string(new_song ? new_song : ""));
       char *json_str = json_dumps(payload, JSON_COMPACT);
       if (json_str != NULL) {

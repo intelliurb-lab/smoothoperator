@@ -249,17 +249,25 @@ int main(int argc, char *argv[]) {
 
   /* Start producer in a background thread */
   pthread_t producer_tid = 0;
+  int producer_created = 0;
   if (producer != NULL) {
-    struct producer_thread_args args = {
-        .producer = producer,
-        .shutdown_flag = &shutdown_requested,
-    };
-    if (pthread_create(&producer_tid, NULL, producer_thread_fn, &args) != 0) {
-      log_msg(LOG_WARN, "main", "Failed to create producer thread", NULL, NULL);
+    struct producer_thread_args *args = malloc(sizeof(struct producer_thread_args));
+    if (args == NULL) {
+      log_msg(LOG_WARN, "main", "Failed to allocate producer thread args", NULL, NULL);
       rabbitmq_producer_free(producer);
       producer = NULL;
+    } else {
+      args->producer = producer;
+      args->shutdown_flag = &shutdown_requested;
+      if (pthread_create(&producer_tid, NULL, producer_thread_fn, args) != 0) {
+        log_msg(LOG_WARN, "main", "Failed to create producer thread", NULL, NULL);
+        free(args);
+        rabbitmq_producer_free(producer);
+        producer = NULL;
+      } else {
+        producer_created = 1;
+      }
     }
-    pthread_detach(producer_tid);
   }
 
   /* Main loop: consumer runs until shutdown (signal sets the flag) */
@@ -268,7 +276,13 @@ int main(int argc, char *argv[]) {
   /* Cleanup */
   if (producer != NULL) {
     rabbitmq_producer_shutdown(producer);
-    usleep(100000);
+  }
+
+  if (producer_created) {
+    pthread_join(producer_tid, NULL);
+  }
+
+  if (producer != NULL) {
     rabbitmq_producer_free(producer);
   }
   rabbitmq_consumer_free(consumer);
