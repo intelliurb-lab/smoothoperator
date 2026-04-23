@@ -1,0 +1,47 @@
+{
+  "rabbitmq": {
+    "__comment_host": "RabbitMQ server IP or hostname",
+    "host": "127.0.0.1",
+    "__comment_port": "RabbitMQ AMQP port (default: 5672)",
+    "port": 5672,
+    "__comment_user": "RabbitMQ username",
+    "user": "memphis",
+    "__comment_vhost": "RabbitMQ virtual host",
+    "vhost": "/",
+    "__comment_queue_name": "The queue where SmoothOperator listens for DJ intents",
+    "queue_name": "smoothoperator.events",
+    "__comment_exchange_name": "The topic exchange used for all radio events",
+    "exchange_name": "radio.events",
+    "__comment_binding_key": "Routing key pattern to bind the input queue (e.g., dj.#)",
+    "binding_key": "dj.#",
+    "__comment_state_routing_key": "Routing key used to publish the global state updates",
+    "state_routing_key": "radio.state"
+  },
+  "liquidsoap": {
+    "__comment_protocol": "Connection protocol: 'telnet' or 'socket'",
+    "protocol": "telnet",
+    "__comment_host": "Liquidsoap telnet host",
+    "host": "127.0.0.1",
+    "__comment_port": "Liquidsoap telnet port",
+    "port": 1234,
+    "__comment_polling_interval_ms": "How often to poll Liquidsoap for metadata (in milliseconds)",
+    "polling_interval_ms": 5000
+  },
+  "commands": {
+    "__comment_section": "Mapping of internal actions to Liquidsoap server commands",
+    "uptime": "server.uptime",
+    "skip": "source.skip",
+    "playlist_reload": "playlist.reload",
+    "playlist_set_uri": "playlist.set_uri",
+    "push_audio": "announcements.push"
+  },
+  "intents": {
+    "__comment_section": "Mapping of incoming RabbitMQ routing keys to internal intents",
+    "set_playlist": "dj.set_playlist",
+    "push_audio": "dj.push_audio",
+    "skip": "dj.skip",
+    "status_request": "dj.status_request"
+  },
+  "__comment_log_level": "Logging verbosity: DEBUG, INFO, WARN, ERROR",
+  "log_level": "DEBUG"
+}

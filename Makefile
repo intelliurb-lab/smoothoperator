@@ -2,21 +2,16 @@
 
 # Build directories
 BUILD_DIR := build
-SOURCE_DIR := src
-TEST_DIR := test
+SOURCE_DIR ?= .
 INCLUDE_DIR := include
 
-# Installation directories (customize with: make install BASE_DIR=/opt/radio)
-BASE_DIR ?= /opt/radio
-BIN_DIR ?= $(BASE_DIR)/bin
-CONFIG_DIR ?= opt/radio/conf/smoothoperator
-LOG_DIR ?= /opt/radio/log/smoothoperator
-CONFIG_FILE ?= $(CONFIG_DIR)/smoothoperator.conf
-SECRETS_FILE ?= $(CONFIG_DIR)/smoothoperator.env
+# Installation directories
+BASE_DIR ?= /usr/local
+CMAKE_INSTALL_PREFIX := $(BASE_DIR)
 
 # Configurações
 CMAKE := cmake
-CMAKE_FLAGS := -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+CMAKE_FLAGS := -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_INSTALL_PREFIX=$(CMAKE_INSTALL_PREFIX)
 
 # Targets
 all: debug
@@ -26,28 +21,26 @@ all: debug
 # ============================================================================
 
 setup:
-	@echo "==> Instalando dependências..."
-	@command -v pkg-config >/dev/null 2>&1 || (echo "Instale: pkg-config"; exit 1)
-	@pkg-config --cflags --libs librabbitmq >/dev/null 2>&1 || \
-		(echo "Instale: librabbitmq-dev (apt: librabbitmq-dev ou brew: librabbitmq)"; exit 1)
-	@pkg-config --cflags --libs jansson >/dev/null 2>&1 || \
-		(echo "Instale: jansson (apt: libjansson-dev ou brew: jansson)"; exit 1)
-	@pkg-config --cflags --libs cunit >/dev/null 2>&1 || \
-		(echo "Instale: cunit (apt: libcunit1-dev ou brew: cunit)"; exit 1)
-	@echo "✓ Dependências OK"
+	@echo "==> Verificando dependências de sistema..."
+	@command -v $(CMAKE) >/dev/null 2>&1 || (echo "Erro: cmake não encontrado."; exit 1)
+	@pkg-config --exists libev || (echo "Erro: libev-dev não encontrado (apt install libev-dev)"; exit 1)
+	@pkg-config --exists openssl || (echo "Erro: libssl-dev não encontrado (apt install libssl-dev)"; exit 1)
+	@echo "✓ Dependências de sistema OK"
 
 debug: setup
-	@echo "==> Build DEBUG..."
+	@echo "==> Configurando build DEBUG em $(BUILD_DIR)..."
 	@mkdir -p $(BUILD_DIR)
-	@cd $(BUILD_DIR) && $(CMAKE) $(CMAKE_FLAGS) -DCMAKE_BUILD_TYPE=Debug ..
-	@cd $(BUILD_DIR) && make -j$$(nproc)
+	@cd $(BUILD_DIR) && $(CMAKE) $(CMAKE_FLAGS) -DCMAKE_BUILD_TYPE=Debug $(SOURCE_DIR)
+	@echo "==> Compilando..."
+	@$(CMAKE) --build $(BUILD_DIR) -j$$(nproc)
 	@echo "✓ Binário em ./$(BUILD_DIR)/smoothoperator"
 
 release: setup
-	@echo "==> Build RELEASE..."
+	@echo "==> Configurando build RELEASE em $(BUILD_DIR)..."
 	@mkdir -p $(BUILD_DIR)
-	@cd $(BUILD_DIR) && $(CMAKE) $(CMAKE_FLAGS) -DCMAKE_BUILD_TYPE=Release ..
-	@cd $(BUILD_DIR) && make -j$$(nproc)
+	@cd $(BUILD_DIR) && $(CMAKE) $(CMAKE_FLAGS) -DCMAKE_BUILD_TYPE=Release $(SOURCE_DIR)
+	@echo "==> Compilando..."
+	@$(CMAKE) --build $(BUILD_DIR) -j$$(nproc)
 	@echo "✓ Binário em ./$(BUILD_DIR)/smoothoperator"
 
 # ============================================================================
@@ -117,73 +110,13 @@ distclean: clean
 # ============================================================================
 
 install: release
-	@echo "==> Installation Settings:"
-	@echo "    BASE_DIR:     $(BASE_DIR)"
-	@echo "    BIN_DIR:      $(BIN_DIR)"
-	@echo "    CONFIG_DIR:   $(CONFIG_DIR)"
-	@echo "    LOG_DIR:      $(LOG_DIR)"
-	@echo ""
-	@echo "==> Binary will be installed to $(BIN_DIR)/smoothoperator"
-	@sha256sum $(BUILD_DIR)/smoothoperator
-	@read -p "Proceed? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
-	@mkdir -p $(BIN_DIR) $(CONFIG_DIR) $(LOG_DIR)
-	@install -D -m 755 $(BUILD_DIR)/smoothoperator $(BIN_DIR)/smoothoperator
-	@install -D -m 644 smoothoperator.conf.example $(CONFIG_FILE).example
-	@install -D -m 600 smoothoperator.env.example $(SECRETS_FILE).example
-	@if [ ! -f $(CONFIG_FILE) ]; then \
-		cp $(CONFIG_FILE).example $(CONFIG_FILE); \
-		chmod 644 $(CONFIG_FILE); \
-		echo "✓ Config template copied to $(CONFIG_FILE)"; \
-	else \
-		echo "⚠ Config exists, template saved as $(CONFIG_FILE).example"; \
-	fi
-	@if [ ! -f $(SECRETS_FILE) ]; then \
-		cp $(SECRETS_FILE).example $(SECRETS_FILE); \
-		chmod 600 $(SECRETS_FILE); \
-		echo "✓ Secrets template copied to $(SECRETS_FILE)"; \
-	else \
-		echo "⚠ Secrets exist, template saved as $(SECRETS_FILE).example"; \
-	fi
-	@echo "✓ Instalado em $(BIN_DIR)/smoothoperator"
-	@echo "✓ Config em $(CONFIG_FILE) (edit before starting)"
-	@echo "✓ Secrets em $(SECRETS_FILE) (edit before starting, mode 600)"
-	@echo "✓ Log dir: $(LOG_DIR)"
+	@echo "==> Instalando em $(CMAKE_INSTALL_PREFIX)..."
+	@sudo $(CMAKE) --install $(BUILD_DIR)
+	@echo "✓ Instalação concluída."
 
 install-systemd: install
-	@echo ""
-	@echo "==> Criando systemd service..."
-	@mkdir -p scripts
-	@echo '[Unit]' > scripts/smoothoperator.service.tmp
-	@echo 'Description=SmoothOperator - RabbitMQ to Liquidsoap Controller' >> scripts/smoothoperator.service.tmp
-	@echo 'After=network.target rabbitmq-server.service' >> scripts/smoothoperator.service.tmp
-	@echo 'Wants=rabbitmq-server.service' >> scripts/smoothoperator.service.tmp
-	@echo '' >> scripts/smoothoperator.service.tmp
-	@echo '[Service]' >> scripts/smoothoperator.service.tmp
-	@echo 'Type=simple' >> scripts/smoothoperator.service.tmp
-	@echo 'User=root' >> scripts/smoothoperator.service.tmp
-	@echo 'Group=root' >> scripts/smoothoperator.service.tmp
-	@echo 'WorkingDirectory=$(CONFIG_DIR)' >> scripts/smoothoperator.service.tmp
-	@echo 'EnvironmentFile=$(SECRETS_FILE)' >> scripts/smoothoperator.service.tmp
-	@echo 'ExecStart=$(BIN_DIR)/smoothoperator -c $(CONFIG_FILE)' >> scripts/smoothoperator.service.tmp
-	@echo 'Restart=on-failure' >> scripts/smoothoperator.service.tmp
-	@echo 'RestartSec=10' >> scripts/smoothoperator.service.tmp
-	@echo 'StandardOutput=journal' >> scripts/smoothoperator.service.tmp
-	@echo 'StandardError=journal' >> scripts/smoothoperator.service.tmp
-	@echo 'SyslogIdentifier=smoothoperator' >> scripts/smoothoperator.service.tmp
-	@echo '' >> scripts/smoothoperator.service.tmp
-	@echo '[Install]' >> scripts/smoothoperator.service.tmp
-	@echo 'WantedBy=multi-user.target' >> scripts/smoothoperator.service.tmp
-	@install -D -m 644 scripts/smoothoperator.service.tmp /etc/systemd/system/smoothoperator.service
-	@rm -f scripts/smoothoperator.service.tmp
-	@systemctl daemon-reload
-	@echo "✓ Systemd service criado em /etc/systemd/system/smoothoperator.service"
-	@echo ""
-	@echo "==> Próximos passos:"
-	@echo "    1. Edit config: nano $(CONFIG_FILE)"
-	@echo "    2. Enable service: systemctl enable smoothoperator"
-	@echo "    3. Start service: systemctl start smoothoperator"
-	@echo "    4. Check status: systemctl status smoothoperator"
-	@echo "    5. View logs: journalctl -u smoothoperator -f"
+	@echo "==> Configurando systemd..."
+	@scripts/setup-service.sh $(CMAKE_INSTALL_PREFIX)
 
 # ============================================================================
 # Development

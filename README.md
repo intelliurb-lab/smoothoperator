@@ -1,427 +1,222 @@
-# 🎵 SmoothOperator
+# 🎵 SmoothOperator v1.0
 
-> High-performance RabbitMQ-to-Liquidsoap controller in C11
+> High-performance C++23 RabbitMQ-to-Liquidsoap Gateway following Clean Architecture.
 
-[![License: BSD-2-Clause](https://img.shields.io/badge/License-BSD%202--Clause-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-36%2F36%20PASSED-brightgreen)](test/)
-[![Memory Safe](https://img.shields.io/badge/Memory%20Safe-ASAN%2FUBSAN%20Clean-brightgreen)](src/)
-[![C11](https://img.shields.io/badge/C-11-blue.svg)](CMakeLists.txt)
+SmoothOperator is the **Global State Gateway** for Intelliurb FM. It eliminates direct Telnet polling from clients by mirroring Liquidsoap's state in memory and publishing it to RabbitMQ. It also translates DJ "intents" (intelligible JSON) into technical commands.
 
 ---
 
-## What is SmoothOperator?
+## ✨ Features (v1.0)
 
-SmoothOperator is a **production-ready daemon** that bridges RabbitMQ (message bus) and Liquidsoap (audio streaming engine), enabling reliable event-driven control of audio streams.
-
-```
-RabbitMQ               SmoothOperator              Liquidsoap
-  (bus)       ────────── (daemon) ──────────      (audio)
-   events          message routing          TCP commands
-```
-
-### 🎯 Perfect For
-
-- Radio stations automating stream control
-- Podcast platforms queueing announcements
-- Audio streaming services with reliable messaging
-- Any system needing RabbitMQ → Liquidsoap integration
+- **Clean Architecture:** Core business logic is decoupled from infrastructure (RabbitMQ/Telnet).
+- **State Store:** Proactive polling of Liquidsoap with real-time state mirroring.
+- **Temporal Enrichment:** Calculates `start_time`, `end_time`, and `duration` for every track.
+- **DJ Intent Translation:** Maps `dj.*` RabbitMQ events to precise Liquidsoap actions.
+- **Security Hardened:** Verified with **ASAN, LSAN, UBSAN, and TSAN** for memory safety and race-condition prevention.
 
 ---
 
-## ✨ Features
+## 🛠️ Requirements
 
-- ✅ **22+ Liquidsoap commands** — Control sources, queues, variables, outputs, playlists
-- ✅ **Dual transport** — TCP telnet or Unix domain socket (configurable)
-- ✅ **Event-driven architecture** — Consumes RabbitMQ messages, routes to Liquidsoap
-- ✅ **Persistent connections** — TCP keep-alive or socket mode, no reconnect overhead
-- ✅ **Automatic retry** — Failed messages re-queued with exponential backoff
-- ✅ **Schema validation** — All payload fields validated per-event
-- ✅ **Structured logging** — JSON audit logs with full event tracking
-- ✅ **Memory safe** — Zero-copy parsing, ASAN/UBSAN clean, bounds checked
-- ✅ **Minimal dependencies** — Pure C, only librabbitmq + jansson + cunit
-- ✅ **Security hardened** — Unix socket symlink protection, world-writable checks
-
----
-
-## ⚡ Quick Start
-
-### Install
+- **Linux:** Ubuntu 22.04+ or Debian 11+
+- **Compiler:** GCC 11+ (C++23 support)
+- **Libraries:** `libev-dev`, `librabbitmq-dev` (optional if using AMQP-CPP internal), `openssl-dev`.
+- **Dependencies (Auto-fetched):** `AMQP-CPP`, `nlohmann/json`, `googletest`.
+## 🚀 Installation & Build
 
 ```bash
-# Clone
+# Install system dependencies
+sudo apt-get update && sudo apt-get install -y cmake g++ libev-dev libssl-dev pkg-config
+
+# Clone and Build using the simplified Makefile
 git clone https://github.com/intelliurb-lab/smoothoperator.git
 cd smoothoperator
-
-# Install dependencies (Ubuntu/Debian)
-sudo apt-get install -y build-essential cmake pkg-config \
-  librabbitmq-dev libjansson-dev libcunit1-dev
-
-# Build
-make debug      # or 'make release'
-make test       # Verify: 18/18 tests pass
+make release
 ```
 
-### Configure
+### Advanced Build Options:
+You can customize the installation and build process using variables:
 
 ```bash
-# Copy config template
-cp smoothoperator.env.example .env
+# Change installation prefix (default is /usr/local)
+make install BASE_DIR=/opt/radio
 
-# Edit .env with your settings
-nano .env
+# Specify a different source directory
+make release SOURCE_DIR=/path/to/source
+
+# Install as a systemd service
+sudo make install-systemd BASE_DIR=/opt/radio
 ```
 
-**Required variables (RabbitMQ):**
+## 🎮 Usage
+
 ```bash
-RABBITMQ_HOST=127.0.0.1
-RABBITMQ_PORT=5672
-RABBITMQ_USER=memphis
-RABBITMQ_PASS=your_strong_password_here_min_16_chars
-RABBITMQ_VHOST=/
-RABBITMQ_QUEUE_NAME=smoothoperator.events
-RABBITMQ_EXCHANGE_NAME=radio.events
-LOG_FILE=/var/log/smoothoperator.log
-LOG_LEVEL=INFO
+./smoothoperator [options]
 ```
 
-**Liquidsoap transport (choose one):**
+### Options:
+- `-h, --help`: Show help message, author, and license information.
+- `-c, --config, --conf <path>`: Specify the path to the JSON configuration file (default: `smoothoperator.json`).
 
-*TCP (Telnet) — default:*
+---
+
+## ⚙️ Configuration
+### Running Tests (Safety Verification)
+
+We use extensive sanitizers to ensure production stability:
+
 ```bash
-LIQUIDSOAP_PROTOCOL=telnet
-LIQUIDSOAP_HOST=127.0.0.1
-LIQUIDSOAP_PORT=1234
+# Build with AddressSanitizer and UndefinedBehaviorSanitizer
+cmake .. -DENABLE_ASAN=ON
+make && ./smoothoperator_unit_tests
+```
+---
+
+## ⚙️ Configuration
+
+SmoothOperator uses a dual-config system to separate infrastructure from secrets.
+
+### 1. `smoothoperator.json` (Infrastructure)
+Create this file in the root directory. It maps technical commands and message routing.
+
+| Section | Field | Description |
+|---------|-------|-------------|
+| **rabbitmq** | `host`/`port` | Connection details for the RabbitMQ broker. |
+| | `user` | Username (Password is stored in `.env`). |
+| | `binding_key` | Routing pattern SmoothOperator listens to (e.g., `dj.#`). |
+| | `state_routing_key` | Topic where SmoothOperator publishes the global state. |
+| **liquidsoap**| `polling_interval_ms`| How often SmoothOperator asks Liquidsoap for updates. |
+| **commands** | (various) | Customizes the technical strings sent to Liquidsoap telnet/socket. |
+| **intents** | (various) | Maps RabbitMQ routing keys to internal business logic actions. |
+
+### 2. `.env` (Secrets)
+Create a `.env` file (strictly ignored by git):
+
+```bash
+RABBITMQ_PASS=your_secure_password_min_16_chars
+GEMINI_API_KEY=your_optional_key
 ```
 
-*Unix Domain Socket — recommended for local deployments:*
-```bash
-LIQUIDSOAP_PROTOCOL=socket
-LIQUIDSOAP_SOCKET_PATH=/var/run/liquidsoap/ls.sock
-```
+---
 
-### RabbitMQ Setup
+## 🏗️ Appendix: System Architecture
 
-SmoothOperator requires a pre-configured RabbitMQ exchange and queue with binding rules. Follow these steps:
+### Class Diagram (PlantUML)
 
-#### 1. Start RabbitMQ
+```plantuml
+@startuml
+namespace smoothoperator {
+    namespace core {
+        interface StreamProvider {
+            +execute(command: string): Result
+            +get_metadata(): Result<json>
+        }
+        interface EventBus {
+            +publish(topic: string, data: json)
+            +subscribe(topic: string, callback)
+        }
+        class StateManager {
+            -stream_provider: StreamProvider
+            -event_bus: EventBus
+            -state: GlobalState
+            -commands: CommandsConfig
+            -intents: IntentsConfig
+            +poll()
+            +handle_dj_command(intent, payload)
+        }
+    }
 
-```bash
-docker run -d --name rabbitmq \
-  -p 5672:5672 \
-  -p 15672:15672 \
-  -e RABBITMQ_DEFAULT_USER=memphis \
-  -e RABBITMQ_DEFAULT_PASS=your_strong_password_here_min_16_chars \
-  rabbitmq:3-management
-```
+    namespace drivers {
+        class TelnetLiquidsoapDriver implements core.StreamProvider
+        class AmqpEventBus implements core.EventBus
+    }
 
-Access the management UI at `http://localhost:15672` (default: guest/guest)
-
-#### 2. Create the Exchange
-
-Using the Management UI:
-1. Go to **Admin** → **Exchanges**
-2. Click **Add a new exchange**
-3. Name: `radio.events`
-4. Type: `topic`
-5. Durability: **Durable** ✓
-6. Click **Add exchange**
-
-Or via command line:
-```bash
-docker exec rabbitmq rabbitmqctl declare_exchange radio.events topic --durable
-```
-
-#### 3. Create the Queue
-
-Using the Management UI:
-1. Go to **Admin** → **Queues**
-2. Click **Add a new queue**
-3. Name: `smoothoperator.events`
-4. Durability: **Durable** ✓
-5. Click **Add queue**
-
-Or via command line:
-```bash
-docker exec rabbitmq rabbitmqctl declare_queue smoothoperator.events --durable
-```
-
-#### 4. Bind Queue to Exchange
-
-The queue must bind to the exchange with routing key patterns. SmoothOperator subscribes to:
-- `control.*` — Control events (skip, shutdown, etc.)
-- `announcement.*` — Announcements
-- `source.*` — Source control
-- `request.*` — Request queue management
-- `var.*` — Variable management
-- `output.*` — Output control
-- `playlist.*` — Playlist management
-- `server.*` — Server introspection
-
-Using the Management UI:
-1. Go to **Admin** → **Exchanges** → `radio.events`
-2. Under **Bindings**, click **Add binding**
-3. To queue: `smoothoperator.events`
-4. Routing key: `control.*` → Click **Bind**
-5. Repeat for each pattern: `announcement.*`, `source.*`, `request.*`, `var.*`, `output.*`, `playlist.*`, `server.*`
-
-Or via command line:
-```bash
-docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'control.*'
-docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'announcement.*'
-docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'source.*'
-docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'request.*'
-docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'var.*'
-docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'output.*'
-docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'playlist.*'
-docker exec rabbitmq rabbitmqctl bind_queue smoothoperator.events radio.events 'server.*'
-```
-
-#### 5. Verify Configuration
-
-```bash
-docker exec rabbitmq rabbitmqctl list_exchanges
-docker exec rabbitmq rabbitmqctl list_queues
-docker exec rabbitmq rabbitmqctl list_bindings
-```
-
-You should see:
-- Exchange: `radio.events` (type: topic, durable)
-- Queue: `smoothoperator.events` (durable)
-- 8 bindings between them with the routing key patterns
-### Run
-
-```bash
-# Start RabbitMQ
-docker run -d -p 5672:5672 rabbitmq:3
-
-# Start Liquidsoap
-liquidsoap 'server.telnet(port=1234, bind_addr="127.0.0.1")'
-
-# Start SmoothOperator
-source .env
-./build/bin/smoothoperator
-```
-
-### Send a Test Message
-
-```bash
-python3 << 'EOF'
-import pika, json
-
-conn = pika.BlockingConnection(pika.ConnectionParameters('127.0.0.1'))
-channel = conn.channel()
-
-msg = {
-    "version": 1,
-    "id": "test-001",
-    "timestamp": "2026-04-20T10:30:00Z",
-    "event": "control.skip",
-    "source": "test"
+    namespace config {
+        class ConfigParser {
+            {static} +load(json_path, env_path): AppConfig
+        }
+        struct AppConfig
+    }
 }
 
-channel.basic_publish(
-    exchange='radio.events',
-    routing_key='control.skip',
-    body=json.dumps(msg)
-)
-conn.close()
-print("✓ Message sent!")
-EOF
+StateManager --> core.StreamProvider
+StateManager --> core.EventBus
+StateManager ..> config.AppConfig
+@enduml
 ```
-
----
-
-## 📚 Supported Events (22+)
-
-**Legacy (backward compatible):**
-- `control.skip` — Skip to next track
-- `control.shutdown` — Shut down Liquidsoap
-- `announcement.push` — Push file to announcement queue
-
-**Source Controls:**
-- `source.skip`, `source.metadata`, `source.remaining`
-
-**Request / Queue:**
-- `request.push`, `request.queue.list`, `request.on_air`, `request.alive`
-- `request.metadata`, `request.trace`
-
-**Interactive Variables:**
-- `var.list`, `var.get`, `var.set`
-
-**Output / Playlist:**
-- `output.start`, `output.stop`
-- `playlist.reload`
-
-**Server Introspection:**
-- `server.uptime`, `server.version`, `server.list`, `server.help`
-
-**State Events (published by producer):**
-- `state.playlist_changed` — Emitted when current playlist variable changes
-- `state.current_song` — Emitted when currently on-air track changes
-
-See [docs/API.md](docs/API.md) for full event schemas and payload validation rules.
-
----
-
-## 🔄 State Publishing (Producer)
-
-In addition to consuming commands, SmoothOperator now actively publishes state changes from Liquidsoap:
-
-```
-Liquidsoap (state variables)
-        ↓ (poll every 5s)
-   SmoothOperator
-        ↓ (publish on change)
-   RabbitMQ (ls.events exchange)
-        ↓ (consume downstream)
-   Your app
-```
-
-**Currently monitored:**
-- `var.get current_playlist` → Published as `state.playlist_changed` 
-- `request.on_air` → Published as `state.current_song`
-
-To consume these events, bind to the `radio.events` exchange with routing key `state.*`:
-
-```bash
-rabbitmqctl declare_queue smoothoperator.state --durable
-rabbitmqctl bind_queue smoothoperator.state radio.events 'state.*'
-```
-
----
-
-## 🧪 Testing
-
-```bash
-# Run unit tests
-make test
-
-# Build with memory sanitizers
-make debug
-ASAN_OPTIONS=verbosity=1 ./build/bin/smoothoperator --help
-
-# Check code coverage
-make coverage
-```
-
-**All 36 tests passing** ✅ (4 suites: message + config + client + controller)
-
----
-
-## 🔒 Security
-
-- No hardcoded credentials
-- TLS support for RabbitMQ
-- Safe C functions (no strcpy, sprintf)
-- Input validation & bounds checking
-- Graceful privilege dropping
-- JSON log injection protection
-
----
-
-## 📖 Documentation
-
-- **[Architecture](ARCHITECTURE.md)** — Design, components, data flow
-- **[API Spec](API.md)** — Message format, examples, protocol
-- **[Contributing](CONTRIBUTING.md)** — How to contribute
-- **[Terms of Use](TERMS_OF_USE.md)** — Legal terms
-
----
-
-## 🛠️ Build Commands
-
-```bash
-make debug          # Debug build (ASAN/UBSAN)
-make release        # Optimized production build
-make test           # Run 18 unit tests
-make coverage       # Generate coverage report
-make format         # Auto-format code
-make lint           # Check code style
-make clean          # Remove build artifacts
-```
-
----
-
-## 📊 Performance
-
-| Metric | Value |
-|--------|-------|
-| **Throughput** | ~1000 messages/sec |
-| **Latency** | <100ms end-to-end |
-| **Memory** | ~5MB resident |
-| **CPU** | <1% idle |
-
----
-
-## 📋 Requirements
-
-**Runtime:**
-- Linux (Ubuntu 20.04+, Debian 11+) or macOS
-- RabbitMQ 3.8+
-- Liquidsoap 1.4+
-
-**Build:**
-- GCC 9+ or Clang 10+
-- CMake 3.15+
-- librabbitmq-dev, libjansson-dev, libcunit1-dev
-
----
-
-## 📝 License
-
-**BSD 2-Clause License** — See [LICENSE](LICENSE)
-
-SmoothOperator is open source and freely available for commercial and personal use.
-
-```
-Copyright (c) 2026 Intelliurb Contributors
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice...
-2. Redistributions in binary form must reproduce the above copyright notice...
-```
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
-- Development setup
-- Code style guidelines
-- Testing requirements
-- Pull request process
-
----
-
-## 🔗 Community
-
-- **Issues:** [GitHub Issues](https://github.com/intelliurb-lab/smoothoperator/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/intelliurb-lab/smoothoperator/discussions)
-- **Email:** contact@intelliurb.com
-
----
-
-## 📈 Status
-
-| Component | Status |
-|-----------|--------|
-| Core Implementation | ✅ Complete |
-| Unit Tests (18) | ✅ All Passing |
-| Security Audit | ✅ 38/46 Issues Fixed |
-| Documentation | ✅ Complete |
-| TLS Support | 🟡 Configurable |
-| HTTP Health Check | ⏳ Planned v0.2 |
-
-**Version:** 0.2.0 | **Last Updated:** 2026-04-22
 
 ---
 
 <div align="center">
+  <b>SmoothOperator v1.0 - Carlos A. Quintella / Intelliurb FM</b>
+</div>
+SmoothOperator expects a **Topic Exchange** named `radio.events`.
 
-**Made with ❤️ by Intelliurb**
+1. **Declare Exchange:** `radio.events` (Type: `topic`).
+2. **Declare Queue:** `smoothoperator.events`.
+3. **Bind Queue:** Bind `smoothoperator.events` to `radio.events` with routing key `dj.#`.
+4. **State Feedback:** Bind your frontend/clients to `radio.state` to receive state updates.
 
-[⭐ Star us on GitHub](https://github.com/intelliurb-lab/smoothoperator)
+---
 
+## 🎮 Usage Examples (Python)
+
+### Sending DJ Commands (Intents)
+
+```python
+import pika, json
+
+def send_command(intent, payload):
+    connection = pika.BlockingConnection(pika.ConnectionParameters('127.0.0.1'))
+    channel = connection.channel()
+    
+    channel.basic_publish(
+        exchange='radio.events',
+        routing_key=intent,
+        body=json.dumps(payload)
+    )
+    connection.close()
+
+# Example: Skip current track
+send_command("dj.skip", {})
+
+# Example: Set new playlist
+send_command("dj.set_playlist", {"uri": "/music/jazz_night.m3u"})
+```
+
+### Listening to Global State Updates
+
+```python
+import pika, json
+
+def on_state_update(ch, method, properties, body):
+    state = json.loads(body)
+    print(f"🎵 Now Playing: {state['track']['title']} by {state['track']['artist']}")
+    print(f"🕒 Ends at: {state['track']['end_time']}")
+
+connection = pika.BlockingConnection(pika.ConnectionParameters('127.0.0.1'))
+channel = connection.channel()
+
+queue = channel.queue_declare(queue='', exclusive=True).method.queue
+channel.queue_bind(exchange='radio.events', queue=queue, routing_key='radio.state')
+
+channel.basic_consume(queue=queue, on_message_callback=on_state_update, auto_ack=True)
+print("📡 Waiting for state updates...")
+channel.start_consuming()
+```
+
+---
+
+## 🛡️ Security & Stability
+
+This project is rigorously tested against:
+- **ASAN/LSAN:** Detects memory leaks and buffer overflows.
+- **UBSAN:** Detects undefined behavior (integer overflows, null pointer dereferences).
+- **TSAN:** Detects data races in multi-threaded contexts.
+- **Stress Testing:** Validated against 1000+ concurrent messages via `test/stress_test.py`.
+
+---
+
+<div align="center">
+  <b>SmoothOperator v1.0 - Intelliurb FM</b>
 </div>

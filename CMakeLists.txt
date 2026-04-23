@@ -1,100 +1,131 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 project(smoothoperator
-  VERSION 0.2.0
-  DESCRIPTION "SmoothOperator - Intelliurb FM RabbitMQ Controller"
-  LANGUAGES C
+  VERSION 1.0.0
+  DESCRIPTION "SmoothOperator - Intelliurb FM RabbitMQ Controller (C++26)"
+  LANGUAGES CXX
 )
 
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Flags padrão
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wpedantic -Wformat -Wformat-security")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror=format-security -Werror=implicit-function-declaration")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wconversion -Wsign-conversion -Wshadow")
+# Flags
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion")
 
-# Hardening flags (all builds)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_FORTIFY_SOURCE=2 -fstack-protector-strong")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fstack-clash-protection -fno-common")
+# Hardening
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_FORTIFY_SOURCE=2 -fstack-protector-strong")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstack-clash-protection -fno-common")
 
-# Debug vs Release
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O0 --coverage")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 --coverage")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fsanitize=undefined")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize=undefined")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address -fsanitize=undefined")
-elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -fPIE")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie -Wl,-z,relro -Wl,-z,now")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-z,noexecstack -Wl,-z,separate-code")
 else()
-  set(CMAKE_BUILD_TYPE "Debug")
+  set(CMAKE_BUILD_TYPE "Release")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fPIE")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie -Wl,-z,relro -Wl,-z,now")
 endif()
 
-# Dependências
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBRABBITMQ REQUIRED librabbitmq)
-pkg_check_modules(JANSSON REQUIRED jansson)
-pkg_check_modules(CUNIT REQUIRED cunit)
+# Dependencies
+include(FetchContent)
+include(GNUInstallDirs)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
-include_directories(${LIBRABBITMQ_INCLUDE_DIRS})
-include_directories(${JANSSON_INCLUDE_DIRS})
-include_directories(${CUNIT_INCLUDE_DIRS})
+# Installation paths (can be overridden)
+set(SMOOTHOP_CONFIG_DIR "${CMAKE_INSTALL_SYSCONFDIR}/smoothoperator" CACHE PATH "Directory for configuration files")
+set(SMOOTHOP_LOG_DIR "${CMAKE_INSTALL_LOCALSTATEDIR}/log/smoothoperator" CACHE PATH "Directory for log files")
 
-# Código-fonte principal
+# nlohmann/json
+FetchContent_Declare(
+  json
+  URL https://github.com/nlohmann/json/releases/download/v3.11.2/json.tar.xz
+)
+FetchContent_MakeAvailable(json)
+
+# AMQP-CPP
+FetchContent_Declare(
+  amqpcpp
+  GIT_REPOSITORY https://github.com/CopernicaMarketingSoftware/AMQP-CPP.git
+  GIT_TAG v4.3.24
+)
+# AMQP-CPP needs some options
+set(AMQP-CPP_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(AMQP-CPP_LINUX_TCP ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(amqpcpp)
+
+# libev (manual find if pkg-config fails)
+find_path(LIBEV_INCLUDE_DIR NAMES ev.h)
+find_library(LIBEV_LIBRARY NAMES ev)
+
+if(NOT LIBEV_INCLUDE_DIR OR NOT LIBEV_LIBRARY)
+    message(FATAL_ERROR "libev not found. Please install libev-dev")
+endif()
+
+# Source files
 set(SMOOTHOP_SOURCES
-  src/main.c
-  src/config.c
-  src/message.c
-  src/liquidsoap_client.c
-  src/rabbitmq_consumer.c
-  src/rabbitmq_producer.c
-  src/ls_controller.c
-  src/smoothoperator_logging.c
+  src/main.cpp
+  src/config/config_parser.cpp
+  src/drivers/rabbitmq_driver.cpp
+  src/drivers/liquidsoap_driver.cpp
+  src/core/state_manager.cpp
 )
 
-# Executável principal
 add_executable(smoothoperator ${SMOOTHOP_SOURCES})
+target_include_directories(smoothoperator PRIVATE 
+    include 
+    src 
+    ${LIBEV_INCLUDE_DIR}
+)
 target_link_libraries(smoothoperator
-  ${LIBRABBITMQ_LIBRARIES}
-  ${JANSSON_LIBRARIES}
+  nlohmann_json::nlohmann_json
+  amqpcpp
+  ${LIBEV_LIBRARY}
   pthread
-  m
 )
 
-# Testes (Critério)
-enable_testing()
+# Installation
+install(TARGETS smoothoperator DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES smoothoperator.conf.example DESTINATION ${SMOOTHOP_CONFIG_DIR})
+install(FILES smoothoperator.json.example DESTINATION ${SMOOTHOP_CONFIG_DIR})
+install(FILES smoothoperator.env.example DESTINATION ${SMOOTHOP_CONFIG_DIR})
 
+# Sanitizers
+
+# Sanitizers
+option(ENABLE_ASAN "Enable AddressSanitizer" ON)
+option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+
+if(ENABLE_ASAN)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined -fno-omit-frame-pointer")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address,undefined")
+endif()
+
+if(ENABLE_TSAN)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
+endif()
+
+# GTest
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/refs/heads/main.zip
+)
+FetchContent_MakeAvailable(googletest)
+
+# Test Sources
 set(TEST_SOURCES
-  test/test_runner.c
-  test/test_message.c
-  test/test_config.c
-  test/test_liquidsoap_client.c
-  test/test_ls_controller.c
-  test/test_logging.c
-  # test/test_rabbitmq_consumer.c  # integração, roda separado
+  test/unit/test_state_manager.cpp
 )
 
-# Compilar sources sem main.c para testes
-list(REMOVE_ITEM SMOOTHOP_SOURCES src/main.c)
-
-# Executável de testes
-add_executable(smoothoperator_tests ${TEST_SOURCES} ${SMOOTHOP_SOURCES})
-target_link_libraries(smoothoperator_tests
-  ${LIBRABBITMQ_LIBRARIES}
-  ${JANSSON_LIBRARIES}
-  ${CUNIT_LIBRARIES}
-  pthread
-  m
+add_executable(smoothoperator_unit_tests 
+    ${TEST_SOURCES}
+    src/core/state_manager.cpp
+)
+target_link_libraries(smoothoperator_unit_tests 
+    GTest::gtest_main 
+    GTest::gmock
+    nlohmann_json::nlohmann_json
 )
 
-# Discovery automático de testes
-add_test(
-  NAME SmoothOperatorTests
-  COMMAND smoothoperator_tests
-)
-
-# Opções de build
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+include(GoogleTest)
+gtest_discover_tests(smoothoperator_unit_tests)
