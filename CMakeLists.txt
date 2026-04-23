@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(smoothoperator
-  VERSION 1.0.0
-  DESCRIPTION "SmoothOperator - Intelliurb FM RabbitMQ Controller (C++26)"
+  VERSION 1.0.1
+  DESCRIPTION "SmoothOperator - Intelliurb Radio RabbitMQ Controller (C++23)"
   LANGUAGES CXX
 )
 

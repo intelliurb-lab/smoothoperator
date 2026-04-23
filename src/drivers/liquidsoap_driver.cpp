@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <cstring>
 #include <iostream>
+#include <sstream>
 
 namespace smoothoperator::drivers {
 
@@ -83,12 +84,29 @@ core::Result<nlohmann::json> TelnetLiquidsoapDriver::get_metadata() {
     nlohmann::json meta = nlohmann::json::object();
     std::string data = std::get<std::string>(res);
     
-    if (data.find("title=") != std::string::npos) {
-        meta["title"] = "Sample Track";
-        meta["artist"] = "Sample Artist";
-        meta["duration"] = 210.0;
-        meta["playlist"] = "heavy_rotation";
+    // Simple line-based parser
+    std::stringstream ss(data);
+    std::string line;
+    while (std::getline(ss, line)) {
+        if (line == "END" || line == "END\r") break;
+        
+        size_t pos = line.find("=\"");
+        if (pos != std::string::npos) {
+            std::string key = line.substr(0, pos);
+            std::string val = line.substr(pos + 2);
+            if (!val.empty() && val.back() == '"') val.pop_back();
+            if (!val.empty() && val.back() == '\r') val.pop_back();
+            if (!val.empty() && val.back() == '"') val.pop_back(); // Handle possible double pop
+            
+            meta[key] = val;
+        }
     }
+
+    // Ensure mandatory fields for core
+    if (!meta.contains("title")) meta["title"] = "Unknown";
+    if (!meta.contains("artist")) meta["artist"] = "Unknown";
+    if (!meta.contains("duration")) meta["duration"] = 0.0;
+    if (!meta.contains("playlist")) meta["playlist"] = "default";
 
     return meta;
 }

@@ -1,8 +1,8 @@
-# 🎵 SmoothOperator v1.0
+# 🎵 SmoothOperator v1.0.1
 
 > High-performance C++23 RabbitMQ-to-Liquidsoap Gateway following Clean Architecture.
 
-SmoothOperator is the **Global State Gateway** for Intelliurb FM. It eliminates direct Telnet polling from clients by mirroring Liquidsoap's state in memory and publishing it to RabbitMQ. It also translates DJ "intents" (intelligible JSON) into technical commands.
+SmoothOperator is the **Global State Gateway** for Intelliurb. It eliminates direct Telnet polling from clients by mirroring Liquidsoap's state in memory and publishing it to RabbitMQ. It also translates DJ "intents" (intelligible JSON) into technical commands.
 
 ---
 
@@ -148,7 +148,7 @@ StateManager ..> config.AppConfig
 ---
 
 <div align="center">
-  <b>SmoothOperator v1.0 - Carlos A. Quintella / Intelliurb FM</b>
+  <b>SmoothOperator v1.0.1 - Carlos A. Quintella / Intelliurb</b>
 </div>
 SmoothOperator expects a **Topic Exchange** named `radio.events`.
 
@@ -218,5 +218,5 @@ This project is rigorously tested against:
 ---
 
 <div align="center">
-  <b>SmoothOperator v1.0 - Intelliurb FM</b>
+  <b>SmoothOperator v1.0.1 - Intelliurb</b>
 </div>

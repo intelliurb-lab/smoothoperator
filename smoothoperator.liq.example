@@ -1,0 +1,71 @@
+# SmoothOperator Liquidsoap 2.2.3 Template
+# This script provides the basic structure to work with SmoothOperator.
+
+# Settings
+set("server.telnet", true)
+set("server.telnet.port", 1234)
+set("server.telnet.bind_addr", "127.0.0.1")
+
+# We use a request.queue for announcements/pushed audio
+announcements = request.queue(id="announcements")
+
+# We use a playlist that can be updated
+# Note: In Liquidsoap 2.2.x, we can use a ref for the URI to allow set_uri
+default_uri = ref "/var/audio/playlist.m3u"
+main_playlist = playlist(id="main_playlist", default_uri)
+
+# Define the radio source
+radio = fallback(track_sensitive=false, [announcements, main_playlist])
+
+# Output to a local icecast or similar (commented out for template)
+# output.icecast(%mp3, host="localhost", port=8000, password="hackme", mount="radio", radio)
+output.dummy(radio)
+
+# --- SmoothOperator Integration ---
+
+# 1. playlist.set_uri
+server.register(usage="playlist.set_uri <uri>",
+                description="Set the URI for the main playlist",
+                "playlist.set_uri",
+                fun (u) -> begin
+                  default_uri.set(u)
+                  "OK"
+                end)
+
+# 2. playlist.reload
+server.register(usage="playlist.reload",
+                description="Reload the main playlist",
+                "playlist.reload",
+                fun (_) -> begin
+                  main_playlist.reload()
+                  "OK"
+                end)
+
+# 3. announcements.push (mapped to announcements.push in config)
+# The request.queue already provides 'announcements.push' by default in older versions,
+# but let's make sure it's consistent.
+# In 2.2.x, request.queue(id="announcements") creates 'announcements.push' telnet command.
+
+# 4. source.skip
+server.register(usage="source.skip",
+                description="Skip current track",
+                "source.skip",
+                fun (_) -> begin
+                  source.skip(radio)
+                  "OK"
+                end)
+
+# 5. server.uptime is built-in.
+
+# 6. request.on_air (used for metadata polling)
+# SmoothOperator expects metadata from this command.
+server.register(usage="request.on_air",
+                description="Get current metadata",
+                "request.on_air",
+                fun (_) -> begin
+                  m = source.metadata_last(radio)
+                  # Format as key="value" pairs
+                  title = m["title"]
+                  artist = m["artist"]
+                  "title=\"#{title}\"\nartist=\"#{artist}\"\nEND"
+                end)

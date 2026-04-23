@@ -59,7 +59,7 @@ int main(int argc, char* argv[]) {
         auto config = config::ConfigParser::load(config_path);
         if (debug_mode) config.log_level = "DEBUG";
 
-        std::cout << "SmoothOperator v1.0 starting..." << std::endl;
+        std::cout << "SmoothOperator v1.0.1 starting..." << std::endl;
         if (debug_mode) {
             std::cout << "[Debug] Config loaded from: " << config_path << std::endl;
             std::cout << "[Debug] RabbitMQ: " << config.rabbitmq.host << ":" << config.rabbitmq.port << std::endl;

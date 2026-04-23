@@ -6,6 +6,8 @@
     "port": 5672,
     "__comment_user": "RabbitMQ username",
     "user": "memphis",
+    "__comment_password": "RabbitMQ password (can also be set via RABBITMQ_PASS env var)",
+    "password": "your_secure_password",
     "__comment_vhost": "RabbitMQ virtual host",
     "vhost": "/",
     "__comment_queue_name": "The queue where SmoothOperator listens for DJ intents",

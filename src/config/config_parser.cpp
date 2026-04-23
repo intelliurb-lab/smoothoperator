@@ -87,9 +87,11 @@ AppConfig ConfigParser::load(const std::string& json_path, const std::string& en
         if (!r.contains("user")) throw std::runtime_error("Missing 'rabbitmq.user'");
         config.rabbitmq.user = r.at("user").get<std::string>();
         
-        // Priority: JSON password > .env RABBITMQ_PASS
+        // Priority: JSON password > JSON pass > .env RABBITMQ_PASS
         if (r.contains("password") && !r.at("password").is_null()) {
             config.rabbitmq.password = r.at("password").get<std::string>();
+        } else if (r.contains("pass") && !r.at("pass").is_null()) {
+            config.rabbitmq.password = r.at("pass").get<std::string>();
         } else {
             config.rabbitmq.password = get_env_or_throw("RABBITMQ_PASS", env_path);
         }

@@ -74,12 +74,15 @@ void StateManager::update_metadata() {
 void StateManager::handle_dj_command(const std::string& intent, const nlohmann::json& payload) {
     std::cout << "[Core] Handling intent: " << intent << std::endl;
 
+    // Support both direct payload and wrapped in {"payload": {...}}
+    const nlohmann::json& data = payload.contains("payload") ? payload.at("payload") : payload;
+
     if (intent == intents_.set_playlist) {
-        std::string uri = payload.at("uri");
+        std::string uri = data.at("uri");
         stream_provider_->execute(commands_.playlist_set_uri + " " + uri);
         stream_provider_->execute(commands_.playlist_reload);
     } else if (intent == intents_.push_audio) {
-        std::string path = payload.at("path");
+        std::string path = data.at("path");
         stream_provider_->execute(commands_.push_audio + " " + path);
     } else if (intent == intents_.skip) {
         stream_provider_->execute(commands_.skip);
