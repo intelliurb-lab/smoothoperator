@@ -10,10 +10,12 @@
 using namespace smoothoperator;
 
 void print_help() {
-    std::cout << "SmoothOperator v1.0\n"
+    std::cout << "SmoothOperator v" << (std::string(SMOOTHOP_VERSION)) << "\n"
               << "Usage: smoothoperator [options]\n\n"
               << "Options:\n"
               << "  -h, --help           Show this help message and exit\n"
+              << "  -v, --version        Show version information and exit\n"
+              << "  -d, --debug          Enable debug logging\n"
               << "  -c, --config, --conf <path>  Path to the configuration file (default: smoothoperator.json)\n\n"
               << "GitHub:  https://github.com/intelliurb-lab/smoothoperator\n"
               << "Author:  Carlos A. Quintella / Intelliurb (caq@intelliurb.com)\n"
@@ -22,12 +24,18 @@ void print_help() {
 
 int main(int argc, char* argv[]) {
     std::string config_path = "smoothoperator.json";
+    bool debug_mode = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "-h" || arg == "--help") {
             print_help();
             return 0;
+        } else if (arg == "-v" || arg == "--version") {
+            std::cout << "SmoothOperator v" << (std::string(SMOOTHOP_VERSION)) << std::endl;
+            return 0;
+        } else if (arg == "-d" || arg == "--debug" || arg == "--DEBUG") {
+            debug_mode = true;
         } else if (arg == "-c" || arg == "--config" || arg == "--conf") {
             if (i + 1 < argc) {
                 config_path = argv[++i];
@@ -49,7 +57,14 @@ int main(int argc, char* argv[]) {
 
     try {
         auto config = config::ConfigParser::load(config_path);
-        std::cout << "SmoothOperator v1.0 [Clean Architecture] starting..." << std::endl;
+        if (debug_mode) config.log_level = "DEBUG";
+
+        std::cout << "SmoothOperator v1.0 starting..." << std::endl;
+        if (debug_mode) {
+            std::cout << "[Debug] Config loaded from: " << config_path << std::endl;
+            std::cout << "[Debug] RabbitMQ: " << config.rabbitmq.host << ":" << config.rabbitmq.port << std::endl;
+            std::cout << "[Debug] Liquidsoap: " << config.liquidsoap.host << ":" << config.liquidsoap.port << std::endl;
+        }
 
         // 1. Infrastructure Setup (Drivers)
         auto ls_driver = std::make_shared<drivers::TelnetLiquidsoapDriver>(
@@ -71,23 +86,37 @@ int main(int argc, char* argv[]) {
         auto state_manager = std::make_shared<core::StateManager>(ls_driver, event_bus, config.rabbitmq.state_routing_key, config.commands, config.intents);
 
         // 3. RabbitMQ Wiring (Event Routing)
-        channel.declareExchange(config.rabbitmq.exchange_name, AMQP::topic);
-        channel.declareQueue(config.rabbitmq.queue_name);
-        channel.bindQueue(config.rabbitmq.exchange_name, config.rabbitmq.queue_name, config.rabbitmq.binding_key);
+        // We use passive declaration to verify existence as requested.
+        channel.declareExchange(config.rabbitmq.exchange_name, AMQP::topic, AMQP::passive)
+            .onError([&](const char* message) {
+                std::cerr << "Fatal error: Exchange '" << config.rabbitmq.exchange_name << "' not found or inaccessible: " << message << std::endl;
+                exit(1);
+            });
 
-        channel.consume(config.rabbitmq.queue_name)
-            .onReceived([&](const AMQP::Message &message, uint64_t deliveryTag, bool /*redelivered*/) {
-                std::string routing_key = message.routingkey();
-                std::string body(message.body(), message.bodySize());
+        channel.declareQueue(config.rabbitmq.queue_name, AMQP::passive)
+            .onSuccess([&](const std::string &name, uint32_t /*messageCount*/, uint32_t /*consumerCount*/) {
+                if (debug_mode) std::cout << "[Debug] Queue verified: " << name << std::endl;
                 
-                try {
-                    auto payload = nlohmann::json::parse(body);
-                    state_manager->handle_dj_command(routing_key, payload);
-                } catch (const std::exception& e) {
-                    std::cerr << "[Main] Error processing message: " << e.what() << std::endl;
-                }
+                channel.bindQueue(config.rabbitmq.exchange_name, config.rabbitmq.queue_name, config.rabbitmq.binding_key);
 
-                channel.ack(deliveryTag);
+                channel.consume(config.rabbitmq.queue_name)
+                    .onReceived([&](const AMQP::Message &message, uint64_t deliveryTag, bool /*redelivered*/) {
+                        std::string routing_key = message.routingkey();
+                        std::string body(message.body(), message.bodySize());
+                        
+                        try {
+                            auto payload = nlohmann::json::parse(body);
+                            state_manager->handle_dj_command(routing_key, payload);
+                        } catch (const std::exception& e) {
+                            std::cerr << "[Main] Error processing message: " << e.what() << std::endl;
+                        }
+
+                        channel.ack(deliveryTag);
+                    });
+            })
+            .onError([&](const char *message) {
+                std::cerr << "Fatal error: Queue '" << config.rabbitmq.queue_name << "' not found or inaccessible: " << message << std::endl;
+                exit(1);
             });
 
         // 4. Polling Timer (Loop Integration)

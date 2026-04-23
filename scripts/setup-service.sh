@@ -26,8 +26,8 @@ Group=root
 WorkingDirectory=$CONFIG_DIR
 # Load environment variables from the .env file
 EnvironmentFile=$ENV_CONFIG
-# Run the binary with the JSON config path
-ExecStart=$BIN_DIR/smoothoperator -c $JSON_CONFIG
+# Run the binary with the JSON config path and debug flag if needed
+ExecStart=$BIN_DIR/smoothoperator -c $JSON_CONFIG --debug
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal

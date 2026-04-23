@@ -80,7 +80,7 @@ core::Result<nlohmann::json> TelnetLiquidsoapDriver::get_metadata() {
     auto res = execute("request.on_air");
     if (std::holds_alternative<std::error_code>(res)) return std::get<std::error_code>(res);
 
-    nlohmann::json meta;
+    nlohmann::json meta = nlohmann::json::object();
     std::string data = std::get<std::string>(res);
     
     if (data.find("title=") != std::string::npos) {

@@ -37,11 +37,18 @@ void StateManager::update_metadata() {
     if (std::holds_alternative<std::error_code>(meta_res)) return;
 
     auto& meta = std::get<nlohmann::json>(meta_res);
+    
+    // Safety check: if meta is not an object, .value() will throw
+    if (!meta.is_object()) {
+        return;
+    }
+
     bool changed = false;
 
     // Check for track changes and enrich with temporal data
     std::string title = meta.value("title", "Unknown");
     if (title != state_.track.title) {
+        std::cout << "[Debug] New track detected: " << title << std::endl;
         state_.track.title = title;
         state_.track.artist = meta.value("artist", "Unknown");
         state_.track.playlist = meta.value("playlist", "default");

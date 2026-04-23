@@ -9,6 +9,9 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Versioning
+add_compile_definitions(SMOOTHOP_VERSION="${PROJECT_VERSION}")
+
 # Flags
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion")
 
@@ -19,8 +22,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstack-clash-protection -fno-common")
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 --coverage")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize=undefined")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address -fsanitize=undefined")
 else()
   set(CMAKE_BUILD_TYPE "Release")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fPIE")
@@ -76,6 +77,11 @@ target_include_directories(smoothoperator PRIVATE
     src 
     ${LIBEV_INCLUDE_DIR}
 )
+# Silence warnings from dependencies
+target_include_directories(smoothoperator SYSTEM PRIVATE 
+    ${json_SOURCE_DIR}/include
+    ${amqpcpp_SOURCE_DIR}/include
+)
 target_link_libraries(smoothoperator
   nlohmann_json::nlohmann_json
   amqpcpp
@@ -94,6 +100,10 @@ install(FILES smoothoperator.env.example DESTINATION ${SMOOTHOP_CONFIG_DIR})
 # Sanitizers
 option(ENABLE_ASAN "Enable AddressSanitizer" ON)
 option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+
+if(ENABLE_ASAN AND ENABLE_TSAN)
+    message(FATAL_ERROR "ASAN and TSAN are mutually exclusive. Choose one.")
+endif()
 
 if(ENABLE_ASAN)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined -fno-omit-frame-pointer")
@@ -120,11 +130,23 @@ set(TEST_SOURCES
 add_executable(smoothoperator_unit_tests 
     ${TEST_SOURCES}
     src/core/state_manager.cpp
+    src/config/config_parser.cpp
+)
+target_include_directories(smoothoperator_unit_tests PRIVATE 
+    include 
+    src
+    ${LIBEV_INCLUDE_DIR}
+)
+# Silence warnings from dependencies
+target_include_directories(smoothoperator_unit_tests SYSTEM PRIVATE 
+    ${json_SOURCE_DIR}/include
+    ${amqpcpp_SOURCE_DIR}/include
 )
 target_link_libraries(smoothoperator_unit_tests 
     GTest::gtest_main 
     GTest::gmock
     nlohmann_json::nlohmann_json
+    pthread
 )
 
 include(GoogleTest)

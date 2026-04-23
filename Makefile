@@ -8,10 +8,15 @@ INCLUDE_DIR := include
 # Installation directories
 BASE_DIR ?= /usr/local
 CMAKE_INSTALL_PREFIX := $(BASE_DIR)
+CONFIG_DIR ?= $(CMAKE_INSTALL_PREFIX)/etc/smoothoperator
+LOG_DIR ?= /var/log/smoothoperator
 
 # Configurações
 CMAKE := cmake
-CMAKE_FLAGS := -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_INSTALL_PREFIX=$(CMAKE_INSTALL_PREFIX)
+CMAKE_FLAGS := -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+               -DCMAKE_INSTALL_PREFIX=$(CMAKE_INSTALL_PREFIX) \
+               -DSMOOTHOP_CONFIG_DIR=$(CONFIG_DIR) \
+               -DSMOOTHOP_LOG_DIR=$(LOG_DIR)
 
 # Targets
 all: debug
@@ -23,14 +28,14 @@ all: debug
 setup:
 	@echo "==> Verificando dependências de sistema..."
 	@command -v $(CMAKE) >/dev/null 2>&1 || (echo "Erro: cmake não encontrado."; exit 1)
-	@pkg-config --exists libev || (echo "Erro: libev-dev não encontrado (apt install libev-dev)"; exit 1)
+	@ls /usr/include/ev.h >/dev/null 2>&1 || ls /usr/local/include/ev.h >/dev/null 2>&1 || (echo "Erro: libev-dev não encontrado (apt install libev-dev)"; exit 1)
 	@pkg-config --exists openssl || (echo "Erro: libssl-dev não encontrado (apt install libssl-dev)"; exit 1)
 	@echo "✓ Dependências de sistema OK"
 
 debug: setup
 	@echo "==> Configurando build DEBUG em $(BUILD_DIR)..."
 	@mkdir -p $(BUILD_DIR)
-	@cd $(BUILD_DIR) && $(CMAKE) $(CMAKE_FLAGS) -DCMAKE_BUILD_TYPE=Debug $(SOURCE_DIR)
+	@cd $(BUILD_DIR) && $(CMAKE) $(CMAKE_FLAGS) -DCMAKE_BUILD_TYPE=Debug ..
 	@echo "==> Compilando..."
 	@$(CMAKE) --build $(BUILD_DIR) -j$$(nproc)
 	@echo "✓ Binário em ./$(BUILD_DIR)/smoothoperator"
@@ -38,7 +43,7 @@ debug: setup
 release: setup
 	@echo "==> Configurando build RELEASE em $(BUILD_DIR)..."
 	@mkdir -p $(BUILD_DIR)
-	@cd $(BUILD_DIR) && $(CMAKE) $(CMAKE_FLAGS) -DCMAKE_BUILD_TYPE=Release $(SOURCE_DIR)
+	@cd $(BUILD_DIR) && $(CMAKE) $(CMAKE_FLAGS) -DCMAKE_BUILD_TYPE=Release ..
 	@echo "==> Compilando..."
 	@$(CMAKE) --build $(BUILD_DIR) -j$$(nproc)
 	@echo "✓ Binário em ./$(BUILD_DIR)/smoothoperator"
