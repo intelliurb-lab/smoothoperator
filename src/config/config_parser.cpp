@@ -26,11 +26,21 @@ void load_env(const std::string& path) {
 
         std::string key = line.substr(0, pos);
         std::string value = line.substr(pos + 1);
-        
-        // Basic trim
+
+        // Trim whitespace from key
         key.erase(0, key.find_first_not_of(" \t"));
         key.erase(key.find_last_not_of(" \t") + 1);
-        
+
+        // Trim whitespace from value
+        value.erase(0, value.find_first_not_of(" \t"));
+        value.erase(value.find_last_not_of(" \t") + 1);
+
+        // Remove surrounding quotes if present
+        if ((value.front() == '"' && value.back() == '"') ||
+            (value.front() == '\'' && value.back() == '\'')) {
+            value = value.substr(1, value.length() - 2);
+        }
+
         setenv(key.c_str(), value.c_str(), 1);
     }
 }
@@ -122,6 +132,9 @@ AppConfig ConfigParser::load(const std::string& json_path, const std::string& en
         
         if (l.contains("polling_interval_ms") && !l.at("polling_interval_ms").is_null()) {
             config.liquidsoap.polling_interval_ms = l.at("polling_interval_ms").get<uint32_t>();
+            if (config.liquidsoap.polling_interval_ms < 100) {
+                throw std::runtime_error("polling_interval_ms must be >= 100ms (to prevent busy-loop)");
+            }
         }
 
         // Commands

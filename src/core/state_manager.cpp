@@ -3,8 +3,21 @@
 #include <iomanip>
 #include <sstream>
 #include <ctime>
+#include <algorithm>
 
 namespace smoothoperator::core {
+
+static std::string sanitize_telnet_arg(const std::string& arg) {
+    std::string result;
+    for (char c : arg) {
+        if (c == '\r' || c == '\n' || c == '\0') {
+            continue;
+        }
+        result += c;
+    }
+    if (result.empty()) throw std::invalid_argument("Telnet argument is empty after sanitization");
+    return result;
+}
 
 StateManager::StateManager(std::shared_ptr<StreamProvider> stream_provider, 
                            std::shared_ptr<EventBus> event_bus,
@@ -81,21 +94,35 @@ void StateManager::handle_dj_command(const std::string& intent, const nlohmann::
     const nlohmann::json& data = payload.contains("payload") ? payload.at("payload") : payload;
 
     if (intent == intents_.set_playlist) {
-        std::string uri = data.at("uri");
-        auto res1 = stream_provider_->execute(commands_.playlist_set_uri + " " + uri);
-        if (std::holds_alternative<std::error_code>(res1)) {
-            std::cerr << "[Core] Failed to set playlist URI: " << std::get<std::error_code>(res1).message() << std::endl;
-            return;
-        }
-        auto res2 = stream_provider_->execute(commands_.playlist_reload);
-        if (std::holds_alternative<std::error_code>(res2)) {
-            std::cerr << "[Core] Failed to reload playlist: " << std::get<std::error_code>(res2).message() << std::endl;
+        try {
+            if (!data.contains("uri") || !data["uri"].is_string()) {
+                throw std::invalid_argument("Missing or invalid 'uri' field (must be string)");
+            }
+            std::string uri = sanitize_telnet_arg(data.at("uri").get<std::string>());
+            auto res1 = stream_provider_->execute(commands_.playlist_set_uri + " " + uri);
+            if (std::holds_alternative<std::error_code>(res1)) {
+                std::cerr << "[Core] Failed to set playlist URI: " << std::get<std::error_code>(res1).message() << std::endl;
+                return;
+            }
+            auto res2 = stream_provider_->execute(commands_.playlist_reload);
+            if (std::holds_alternative<std::error_code>(res2)) {
+                std::cerr << "[Core] Failed to reload playlist: " << std::get<std::error_code>(res2).message() << std::endl;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "[Core] Invalid playlist command: " << e.what() << std::endl;
         }
     } else if (intent == intents_.push_audio) {
-        std::string path = data.at("path");
-        auto res = stream_provider_->execute(commands_.push_audio + " " + path);
-        if (std::holds_alternative<std::error_code>(res)) {
-            std::cerr << "[Core] Failed to push audio: " << std::get<std::error_code>(res).message() << std::endl;
+        try {
+            if (!data.contains("path") || !data["path"].is_string()) {
+                throw std::invalid_argument("Missing or invalid 'path' field (must be string)");
+            }
+            std::string path = sanitize_telnet_arg(data.at("path").get<std::string>());
+            auto res = stream_provider_->execute(commands_.push_audio + " " + path);
+            if (std::holds_alternative<std::error_code>(res)) {
+                std::cerr << "[Core] Failed to push audio: " << std::get<std::error_code>(res).message() << std::endl;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "[Core] Invalid push audio command: " << e.what() << std::endl;
         }
     } else if (intent == intents_.skip) {
         auto res = stream_provider_->execute(commands_.skip);

@@ -95,30 +95,47 @@ install(FILES smoothoperator.conf.example DESTINATION ${SMOOTHOP_CONFIG_DIR})
 install(FILES smoothoperator.json.example DESTINATION ${SMOOTHOP_CONFIG_DIR})
 install(FILES smoothoperator.env.example DESTINATION ${SMOOTHOP_CONFIG_DIR})
 
-# Sanitizers
+# Sanitizers (enabled in Debug by default, disabled in Release for performance)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  option(ENABLE_ASAN "Enable AddressSanitizer" ON)
+  option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 
-# Sanitizers
-option(ENABLE_ASAN "Enable AddressSanitizer" ON)
-option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+  if(ENABLE_ASAN AND ENABLE_TSAN)
+      message(FATAL_ERROR "ASAN and TSAN are mutually exclusive. Choose one.")
+  endif()
 
-if(ENABLE_ASAN AND ENABLE_TSAN)
-    message(FATAL_ERROR "ASAN and TSAN are mutually exclusive. Choose one.")
+  if(ENABLE_ASAN)
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined -fno-omit-frame-pointer")
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address,undefined")
+  endif()
+
+  if(ENABLE_TSAN)
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
+  endif()
+else()
+  # Release mode: sanitizers disabled by default for performance
+  option(ENABLE_ASAN "Enable AddressSanitizer (Release)" OFF)
+  option(ENABLE_TSAN "Enable ThreadSanitizer (Release)" OFF)
+
+  if(ENABLE_ASAN)
+      message(WARNING "ASAN is enabled in Release mode - may impact performance significantly")
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined")
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address,undefined")
+  endif()
+
+  if(ENABLE_TSAN)
+      message(WARNING "TSAN is enabled in Release mode - may impact performance significantly")
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
+  endif()
 endif()
 
-if(ENABLE_ASAN)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined -fno-omit-frame-pointer")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address,undefined")
-endif()
-
-if(ENABLE_TSAN)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
-endif()
-
-# GTest
+# GTest (pinned to stable release for reproducible builds)
 FetchContent_Declare(
   googletest
-  URL https://github.com/google/googletest/archive/refs/heads/main.zip
+  GIT_REPOSITORY https://github.com/google/googletest.git
+  GIT_TAG v1.14.0
 )
 FetchContent_MakeAvailable(googletest)
 

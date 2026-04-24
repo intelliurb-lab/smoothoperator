@@ -23,6 +23,13 @@ void print_help() {
               << "License: BSD 2-Clause License\n" << std::endl;
 }
 
+static struct ev_loop *g_loop = nullptr;
+
+static void signal_callback(struct ev_loop *loop, ev_signal *w, int revents) {
+    std::cout << "\n[Main] Received signal " << w->signum << ", shutting down..." << std::endl;
+    ev_break(loop, EVBREAK_ALL);
+}
+
 int main(int argc, char* argv[]) {
     signal(SIGPIPE, SIG_IGN);
 
@@ -62,7 +69,7 @@ int main(int argc, char* argv[]) {
         auto config = config::ConfigParser::load(config_path);
         if (debug_mode) config.log_level = "DEBUG";
 
-        std::cout << "SmoothOperator v1.0.1 starting..." << std::endl;
+        std::cout << "SmoothOperator v" << SMOOTHOP_VERSION << " starting..." << std::endl;
         if (debug_mode) {
             std::cout << "[Debug] Config loaded from: " << config_path << std::endl;
             std::cout << "[Debug] RabbitMQ: " << config.rabbitmq.host << ":" << config.rabbitmq.port << std::endl;
@@ -110,11 +117,14 @@ int main(int argc, char* argv[]) {
                         try {
                             auto payload = nlohmann::json::parse(body);
                             state_manager->handle_dj_command(routing_key, payload);
+                            channel->ack(deliveryTag);
+                        } catch (const nlohmann::json::parse_error& e) {
+                            std::cerr << "[Main] JSON parse error in message (discarding): " << e.what() << std::endl;
+                            channel->ack(deliveryTag);
                         } catch (const std::exception& e) {
-                            std::cerr << "[Main] Error processing message: " << e.what() << std::endl;
+                            std::cerr << "[Main] Logic error processing message: " << e.what() << std::endl;
+                            channel->reject(deliveryTag, true);
                         }
-
-                        channel->ack(deliveryTag);
                     });
             })
             .onError([&](const char *message) {
@@ -131,7 +141,15 @@ int main(int argc, char* argv[]) {
         }, 0, config.liquidsoap.polling_interval_ms / 1000.0);
         ev_timer_start(main_loop, &poll_watcher);
 
-        std::cout << "Event loop running..." << std::endl;
+        // 5. Signal Handlers (Graceful Shutdown)
+        g_loop = main_loop;
+        ev_signal sig_int, sig_term;
+        ev_signal_init(&sig_int, signal_callback, SIGINT);
+        ev_signal_init(&sig_term, signal_callback, SIGTERM);
+        ev_signal_start(main_loop, &sig_int);
+        ev_signal_start(main_loop, &sig_term);
+
+        std::cout << "Event loop running... (Ctrl+C to stop)" << std::endl;
         ev_run(main_loop, 0);
 
     } catch (const std::exception& e) {

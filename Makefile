@@ -4,6 +4,7 @@
 BUILD_DIR := build
 SOURCE_DIR ?= .
 INCLUDE_DIR := include
+TEST_DIR := test
 
 # Installation directories
 BASE_DIR ?= /usr/local
@@ -74,24 +75,22 @@ lint:
 	@echo "==> Lint (clang-format check)..."
 	@command -v clang-format >/dev/null 2>&1 || \
 		(echo "Instale: clang-format (apt: clang-format ou brew: clang-format)"; exit 1)
-	@for f in $(SOURCE_DIR)/*.c $(INCLUDE_DIR)/*.h $(TEST_DIR)/*.c; do \
-		if [ -f "$$f" ]; then \
-			clang-format --dry-run --Werror "$$f" || exit 1; \
-		fi; \
+	@find $(SOURCE_DIR)/src $(INCLUDE_DIR) $(TEST_DIR) -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) | while read f; do \
+		clang-format --dry-run --Werror "$$f" || exit 1; \
 	done
 	@echo "✓ Lint OK"
 
 format:
 	@echo "==> Reformatando código..."
-	@clang-format -i $(SOURCE_DIR)/*.c $(INCLUDE_DIR)/*.h $(TEST_DIR)/*.c
+	@find $(SOURCE_DIR)/src $(INCLUDE_DIR) $(TEST_DIR) -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) -exec clang-format -i {} \;
 	@echo "✓ Código formatado"
 
 static-analysis:
 	@echo "==> Static analysis (cppcheck)..."
 	@command -v cppcheck >/dev/null 2>&1 || \
 		(echo "Instale: cppcheck (apt: cppcheck ou brew: cppcheck)"; exit 1)
-	@cppcheck --std=c11 --enable=all --suppress=missingIncludeSystem \
-		$(SOURCE_DIR) $(INCLUDE_DIR)
+	@cppcheck --std=c++20 --enable=all --suppress=missingIncludeSystem \
+		$(SOURCE_DIR)/src $(INCLUDE_DIR)
 	@echo "✓ Static analysis OK"
 
 # ============================================================================
