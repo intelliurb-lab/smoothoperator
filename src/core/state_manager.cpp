@@ -31,6 +31,7 @@ StateManager::StateManager(std::shared_ptr<StreamProvider> stream_provider,
       intents_(std::move(intents)) {}
 
 void StateManager::poll() {
+    std::lock_guard<std::mutex> lock(state_mutex_);
     update_status();
     update_metadata();
 }
@@ -66,11 +67,19 @@ void StateManager::update_metadata() {
         state_.track.artist = meta.value("artist", "Unknown");
         state_.track.playlist = meta.value("playlist", "default");
         state_.track.duration = meta.value("duration", 0.0);
-        
-        // Enrichment: start_time, end_time
-        state_.track.start_time = get_current_utc_time();
 
+        // Enrichment: start_time, end_time (capture now once to avoid drift)
         auto now = std::chrono::system_clock::now();
+
+        state_.track.start_time = [now]() {
+            auto in_time_t = std::chrono::system_clock::to_time_t(now);
+            struct tm tm_buf{};
+            gmtime_r(&in_time_t, &tm_buf);
+            std::stringstream ss;
+            ss << std::put_time(&tm_buf, "%Y-%m-%dT%H:%M:%SZ");
+            return ss.str();
+        }();
+
         auto end_time = now + std::chrono::milliseconds(static_cast<long long>(state_.track.duration * 1000.0));
         auto tt = std::chrono::system_clock::to_time_t(end_time);
         struct tm tm_buf{};
@@ -78,7 +87,7 @@ void StateManager::update_metadata() {
         std::stringstream ss;
         ss << std::put_time(&tm_buf, "%Y-%m-%dT%H:%M:%SZ");
         state_.track.end_time = ss.str();
-        
+
         changed = true;
     }
 
@@ -89,6 +98,8 @@ void StateManager::update_metadata() {
 
 void StateManager::handle_dj_command(const std::string& intent, const nlohmann::json& payload) {
     std::cout << "[Core] Handling intent: " << intent << std::endl;
+
+    std::lock_guard<std::mutex> lock(state_mutex_);
 
     // Support both direct payload and wrapped in {"payload": {...}}
     const nlohmann::json& data = payload.contains("payload") ? payload.at("payload") : payload;
@@ -139,6 +150,7 @@ void StateManager::broadcast_state() {
 }
 
 nlohmann::json StateManager::get_state_json() const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
     nlohmann::json j;
     j["status"] = state_.status;
     j["track"]["artist"] = state_.track.artist;

@@ -144,10 +144,9 @@ set(TEST_SOURCES
   test/unit/test_state_manager.cpp
 )
 
-add_executable(smoothoperator_unit_tests 
+add_executable(smoothoperator_unit_tests
     ${TEST_SOURCES}
     src/core/state_manager.cpp
-    src/config/config_parser.cpp
 )
 target_include_directories(smoothoperator_unit_tests PRIVATE 
     include 

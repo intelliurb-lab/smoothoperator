@@ -8,8 +8,6 @@
 #include "smoothoperator/rabbitmq_driver.hpp"
 #include "smoothoperator/state_manager.hpp"
 
-using namespace smoothoperator;
-
 void print_help() {
     std::cout << "SmoothOperator v" << (std::string(SMOOTHOP_VERSION)) << "\n"
               << "Usage: smoothoperator [options]\n\n"
@@ -66,7 +64,7 @@ int main(int argc, char* argv[]) {
     }
 
     try {
-        auto config = config::ConfigParser::load(config_path);
+        auto config = smoothoperator::config::ConfigParser::load(config_path);
         if (debug_mode) config.log_level = "DEBUG";
 
         std::cout << "SmoothOperator v" << SMOOTHOP_VERSION << " starting..." << std::endl;
@@ -77,7 +75,7 @@ int main(int argc, char* argv[]) {
         }
 
         // 1. Infrastructure Setup (Drivers)
-        auto ls_driver = std::make_shared<drivers::TelnetLiquidsoapDriver>(
+        auto ls_driver = std::make_shared<smoothoperator::drivers::TelnetLiquidsoapDriver>(
             config.liquidsoap.host, config.liquidsoap.port);
 
         // Setup LibEv & AMQP
@@ -90,17 +88,17 @@ int main(int argc, char* argv[]) {
         auto connection = std::make_shared<AMQP::TcpConnection>(&amqp_handler, address);
         auto channel = std::make_shared<AMQP::TcpChannel>(connection.get());
 
-        auto event_bus = std::make_shared<drivers::AmqpEventBus>(channel, config.rabbitmq.exchange_name);
+        auto event_bus = std::make_shared<smoothoperator::drivers::AmqpEventBus>(channel, config.rabbitmq.exchange_name);
 
         // 2. Core Setup (Dependency Injection)
-        auto state_manager = std::make_shared<core::StateManager>(ls_driver, event_bus, config.rabbitmq.state_routing_key, config.commands, config.intents);
+        auto state_manager = std::make_shared<smoothoperator::core::StateManager>(ls_driver, event_bus, config.rabbitmq.state_routing_key, config.commands, config.intents);
 
         // 3. RabbitMQ Wiring (Event Routing)
         // We use passive declaration to verify existence as requested.
         channel->declareExchange(config.rabbitmq.exchange_name, AMQP::topic, AMQP::passive)
             .onError([&](const char* message) {
                 std::cerr << "Fatal error: Exchange '" << config.rabbitmq.exchange_name << "' not found or inaccessible: " << message << std::endl;
-                exit(1);
+                ev_break(main_loop, EVBREAK_ALL);
             });
 
         channel->declareQueue(config.rabbitmq.queue_name, AMQP::passive)
@@ -129,15 +127,21 @@ int main(int argc, char* argv[]) {
             })
             .onError([&](const char *message) {
                 std::cerr << "Fatal error: Queue '" << config.rabbitmq.queue_name << "' not found or inaccessible: " << message << std::endl;
-                exit(1);
+                ev_break(main_loop, EVBREAK_ALL);
             });
 
         // 4. Polling Timer (Loop Integration)
+        // Use heap-allocated context to safely hold shared_ptr and avoid dangling raw pointer
+        struct PollContext {
+            std::shared_ptr<smoothoperator::core::StateManager> state_manager;
+        };
+        auto* poll_context = new PollContext{state_manager};
+
         ev_timer poll_watcher;
-        poll_watcher.data = state_manager.get();
+        poll_watcher.data = poll_context;
         ev_timer_init(&poll_watcher, [](struct ev_loop * /*loop*/, ev_timer *w, int /*revents*/) {
-            auto* sm = static_cast<core::StateManager*>(w->data);
-            sm->poll();
+            auto* ctx = static_cast<PollContext*>(w->data);
+            ctx->state_manager->poll();
         }, 0, config.liquidsoap.polling_interval_ms / 1000.0);
         ev_timer_start(main_loop, &poll_watcher);
 
@@ -151,6 +155,10 @@ int main(int argc, char* argv[]) {
 
         std::cout << "Event loop running... (Ctrl+C to stop)" << std::endl;
         ev_run(main_loop, 0);
+
+        // Cleanup
+        delete poll_context;
+        std::cout << "Shutting down gracefully..." << std::endl;
 
     } catch (const std::exception& e) {
         std::cerr << "Fatal error: " << e.what() << std::endl;

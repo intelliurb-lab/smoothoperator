@@ -17,8 +17,22 @@ TelnetLiquidsoapDriver::~TelnetLiquidsoapDriver() {
     disconnect();
 }
 
+void TelnetLiquidsoapDriver::apply_backoff_delay() {
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_connection_attempt_);
+
+    // Only increase backoff if we've already waited minimum time
+    if (elapsed.count() >= backoff_ms_) {
+        backoff_ms_ = std::min(backoff_ms_ * 2, MAX_BACKOFF_MS);
+    }
+
+    last_connection_attempt_ = std::chrono::steady_clock::now();
+}
+
 std::error_code TelnetLiquidsoapDriver::connect() {
     if (socket_fd_ != -1) return {};
+
+    apply_backoff_delay();
 
     struct addrinfo hints{}, *results = nullptr;
     hints.ai_family = AF_UNSPEC;
@@ -36,6 +50,7 @@ std::error_code TelnetLiquidsoapDriver::connect() {
 
         if (::connect(socket_fd_, p->ai_addr, p->ai_addrlen) == 0) {
             freeaddrinfo(results);
+            backoff_ms_ = 100;
             return {};
         }
 
@@ -95,30 +110,40 @@ core::Result<nlohmann::json> TelnetLiquidsoapDriver::get_metadata() {
     nlohmann::json meta = nlohmann::json::object();
     std::string data = std::get<std::string>(res);
 
-    // Simple line-based parser
+    // Robust line-based parser (handles key="value" format)
     std::stringstream ss(data);
     std::string line;
     while (std::getline(ss, line)) {
         if (line == "END" || line == "END\r") break;
 
-        size_t pos = line.find("=\"");
-        if (pos != std::string::npos) {
-            std::string key = line.substr(0, pos);
-            std::string val = line.substr(pos + 2);
-            if (!val.empty() && val.back() == '"') val.pop_back();
-            if (!val.empty() && val.back() == '\r') val.pop_back();
-            if (!val.empty() && val.back() == '"') val.pop_back();
+        // Look for pattern: key="value"
+        size_t eq_pos = line.find('=');
+        if (eq_pos == std::string::npos) continue;
 
-            // Convert numeric fields from string to proper types
-            if (key == "duration") {
-                try {
-                    meta[key] = std::stod(val);
-                } catch (...) {
-                    meta[key] = 0.0;
-                }
-            } else {
-                meta[key] = val;
+        std::string key = line.substr(0, eq_pos);
+
+        // Value starts after =" and ends at last "
+        if (eq_pos + 1 >= line.length() || line[eq_pos + 1] != '"') continue;
+
+        size_t val_start = eq_pos + 2;
+        size_t val_end = line.rfind('"');
+
+        if (val_end <= val_start) continue;
+
+        std::string val = line.substr(val_start, val_end - val_start);
+
+        // Remove trailing \r if present
+        if (!val.empty() && val.back() == '\r') val.pop_back();
+
+        // Convert numeric fields from string to proper types
+        if (key == "duration") {
+            try {
+                meta[key] = std::stod(val);
+            } catch (...) {
+                meta[key] = 0.0;
             }
+        } else {
+            meta[key] = val;
         }
     }
 

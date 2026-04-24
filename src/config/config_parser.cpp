@@ -9,8 +9,7 @@ namespace smoothoperator::config {
 void load_env(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
-        // Only warn if default .env is missing, but error if a specific path was expected?
-        // For now, let's keep it optional but report if it's there and malformed.
+        std::cerr << "[Config] Warning: " << path << " not found. Falling back to environment variables." << std::endl;
         return;
     }
 
@@ -71,6 +70,14 @@ AppConfig ConfigParser::load(const std::string& json_path, const std::string& en
     if (!file.is_open()) {
         throw std::runtime_error("Configuration error: Could not open file '" + json_path + "'");
     }
+
+    const size_t MAX_CONFIG_SIZE = 1024 * 1024;
+    file.seekg(0, std::ios::end);
+    size_t file_size = file.tellg();
+    if (file_size > MAX_CONFIG_SIZE) {
+        throw std::runtime_error("Configuration error: File '" + json_path + "' exceeds maximum size of 1MB");
+    }
+    file.seekg(0, std::ios::beg);
 
     nlohmann::json j;
     try {
@@ -158,7 +165,6 @@ AppConfig ConfigParser::load(const std::string& json_path, const std::string& en
 
         // App
         if (j.contains("log_level") && !j.at("log_level").is_null()) config.log_level = j.at("log_level").get<std::string>();
-        config.gemini_api_key = get_env_optional("GEMINI_API_KEY");
 
     } catch (const nlohmann::json::exception& e) {
         throw std::runtime_error("Configuration error: Type mismatch or JSON error: " + std::string(e.what()));
