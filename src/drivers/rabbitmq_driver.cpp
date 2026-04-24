@@ -3,12 +3,12 @@
 
 namespace smoothoperator::drivers {
 
-AmqpEventBus::AmqpEventBus(AMQP::Channel& channel, const std::string& exchange)
-    : channel_(channel), exchange_(exchange) {}
+AmqpEventBus::AmqpEventBus(std::shared_ptr<AMQP::Channel> channel, const std::string& exchange)
+    : channel_(std::move(channel)), exchange_(exchange) {}
 
 void AmqpEventBus::publish(const std::string& topic, const nlohmann::json& payload) {
     std::string msg = payload.dump();
-    channel_.publish(exchange_, topic, msg);
+    channel_->publish(exchange_, topic, msg);
 }
 
 void AmqpEventBus::subscribe([[maybe_unused]] const std::string& pattern, [[maybe_unused]] std::function<void(const std::string&, const nlohmann::json&)> handler) {

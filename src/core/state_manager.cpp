@@ -56,11 +56,14 @@ void StateManager::update_metadata() {
         
         // Enrichment: start_time, end_time
         state_.track.start_time = get_current_utc_time();
-        
-        auto t = std::chrono::system_clock::now() + std::chrono::seconds(static_cast<int>(state_.track.duration));
-        auto tt = std::chrono::system_clock::to_time_t(t);
+
+        auto now = std::chrono::system_clock::now();
+        auto end_time = now + std::chrono::milliseconds(static_cast<long long>(state_.track.duration * 1000.0));
+        auto tt = std::chrono::system_clock::to_time_t(end_time);
+        struct tm tm_buf{};
+        gmtime_r(&tt, &tm_buf);
         std::stringstream ss;
-        ss << std::put_time(std::gmtime(&tt), "%Y-%m-%dT%H:%M:%SZ");
+        ss << std::put_time(&tm_buf, "%Y-%m-%dT%H:%M:%SZ");
         state_.track.end_time = ss.str();
         
         changed = true;
@@ -79,13 +82,26 @@ void StateManager::handle_dj_command(const std::string& intent, const nlohmann::
 
     if (intent == intents_.set_playlist) {
         std::string uri = data.at("uri");
-        stream_provider_->execute(commands_.playlist_set_uri + " " + uri);
-        stream_provider_->execute(commands_.playlist_reload);
+        auto res1 = stream_provider_->execute(commands_.playlist_set_uri + " " + uri);
+        if (std::holds_alternative<std::error_code>(res1)) {
+            std::cerr << "[Core] Failed to set playlist URI: " << std::get<std::error_code>(res1).message() << std::endl;
+            return;
+        }
+        auto res2 = stream_provider_->execute(commands_.playlist_reload);
+        if (std::holds_alternative<std::error_code>(res2)) {
+            std::cerr << "[Core] Failed to reload playlist: " << std::get<std::error_code>(res2).message() << std::endl;
+        }
     } else if (intent == intents_.push_audio) {
         std::string path = data.at("path");
-        stream_provider_->execute(commands_.push_audio + " " + path);
+        auto res = stream_provider_->execute(commands_.push_audio + " " + path);
+        if (std::holds_alternative<std::error_code>(res)) {
+            std::cerr << "[Core] Failed to push audio: " << std::get<std::error_code>(res).message() << std::endl;
+        }
     } else if (intent == intents_.skip) {
-        stream_provider_->execute(commands_.skip);
+        auto res = stream_provider_->execute(commands_.skip);
+        if (std::holds_alternative<std::error_code>(res)) {
+            std::cerr << "[Core] Failed to skip: " << std::get<std::error_code>(res).message() << std::endl;
+        }
     } else if (intent == intents_.status_request) {
         broadcast_state();
     }
@@ -111,8 +127,10 @@ nlohmann::json StateManager::get_state_json() const {
 std::string StateManager::get_current_utc_time() {
     auto now = std::chrono::system_clock::now();
     auto in_time_t = std::chrono::system_clock::to_time_t(now);
+    struct tm tm_buf{};
+    gmtime_r(&in_time_t, &tm_buf);
     std::stringstream ss;
-    ss << std::put_time(std::gmtime(&in_time_t), "%Y-%m-%dT%H:%M:%SZ");
+    ss << std::put_time(&tm_buf, "%Y-%m-%dT%H:%M:%SZ");
     return ss.str();
 }
 

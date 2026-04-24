@@ -116,11 +116,8 @@ AppConfig ConfigParser::load(const std::string& json_path, const std::string& en
             if (!l.contains("port")) throw std::runtime_error("Missing 'liquidsoap.port' for telnet protocol");
             config.liquidsoap.host = l.at("host").get<std::string>();
             config.liquidsoap.port = l.at("port").get<uint16_t>();
-        } else if (config.liquidsoap.protocol == "socket") {
-            if (!l.contains("socket_path")) throw std::runtime_error("Missing 'liquidsoap.socket_path' for socket protocol");
-            config.liquidsoap.socket_path = l.at("socket_path").get<std::string>();
         } else {
-            throw std::runtime_error("Unsupported liquidsoap.protocol: " + config.liquidsoap.protocol);
+            throw std::runtime_error("Unsupported liquidsoap.protocol: '" + config.liquidsoap.protocol + "'. Only 'telnet' is currently implemented.");
         }
         
         if (l.contains("polling_interval_ms") && !l.at("polling_interval_ms").is_null()) {

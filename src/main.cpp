@@ -1,4 +1,5 @@
 #include <iostream>
+#include <csignal>
 #include <ev.h>
 #include <amqpcpp.h>
 #include <amqpcpp/libev.h>
@@ -23,6 +24,8 @@ void print_help() {
 }
 
 int main(int argc, char* argv[]) {
+    signal(SIGPIPE, SIG_IGN);
+
     std::string config_path = "smoothoperator.json";
     bool debug_mode = false;
 
@@ -77,8 +80,8 @@ int main(int argc, char* argv[]) {
                              AMQP::Login(config.rabbitmq.user, config.rabbitmq.password),
                              config.rabbitmq.vhost);
 
-        AMQP::TcpConnection connection(&amqp_handler, address);
-        AMQP::TcpChannel channel(&connection);
+        auto connection = std::make_shared<AMQP::TcpConnection>(&amqp_handler, address);
+        auto channel = std::make_shared<AMQP::TcpChannel>(connection.get());
 
         auto event_bus = std::make_shared<drivers::AmqpEventBus>(channel, config.rabbitmq.exchange_name);
 
@@ -87,23 +90,23 @@ int main(int argc, char* argv[]) {
 
         // 3. RabbitMQ Wiring (Event Routing)
         // We use passive declaration to verify existence as requested.
-        channel.declareExchange(config.rabbitmq.exchange_name, AMQP::topic, AMQP::passive)
+        channel->declareExchange(config.rabbitmq.exchange_name, AMQP::topic, AMQP::passive)
             .onError([&](const char* message) {
                 std::cerr << "Fatal error: Exchange '" << config.rabbitmq.exchange_name << "' not found or inaccessible: " << message << std::endl;
                 exit(1);
             });
 
-        channel.declareQueue(config.rabbitmq.queue_name, AMQP::passive)
+        channel->declareQueue(config.rabbitmq.queue_name, AMQP::passive)
             .onSuccess([&](const std::string &name, uint32_t /*messageCount*/, uint32_t /*consumerCount*/) {
                 if (debug_mode) std::cout << "[Debug] Queue verified: " << name << std::endl;
-                
-                channel.bindQueue(config.rabbitmq.exchange_name, config.rabbitmq.queue_name, config.rabbitmq.binding_key);
 
-                channel.consume(config.rabbitmq.queue_name)
+                channel->bindQueue(config.rabbitmq.exchange_name, config.rabbitmq.queue_name, config.rabbitmq.binding_key);
+
+                channel->consume(config.rabbitmq.queue_name)
                     .onReceived([&](const AMQP::Message &message, uint64_t deliveryTag, bool /*redelivered*/) {
                         std::string routing_key = message.routingkey();
                         std::string body(message.body(), message.bodySize());
-                        
+
                         try {
                             auto payload = nlohmann::json::parse(body);
                             state_manager->handle_dj_command(routing_key, payload);
@@ -111,7 +114,7 @@ int main(int argc, char* argv[]) {
                             std::cerr << "[Main] Error processing message: " << e.what() << std::endl;
                         }
 
-                        channel.ack(deliveryTag);
+                        channel->ack(deliveryTag);
                     });
             })
             .onError([&](const char *message) {
