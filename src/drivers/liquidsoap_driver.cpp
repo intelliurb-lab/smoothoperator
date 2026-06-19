@@ -1,5 +1,6 @@
 #include "smoothoperator/liquidsoap_driver.hpp"
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -148,6 +149,143 @@ core::Result<nlohmann::json> TelnetLiquidsoapDriver::get_metadata() {
     }
 
     // Ensure mandatory fields for core with correct types
+    if (!meta.contains("title")) meta["title"] = "Unknown";
+    if (!meta.contains("artist")) meta["artist"] = "Unknown";
+    if (!meta.contains("duration") || !meta["duration"].is_number()) meta["duration"] = 0.0;
+    if (!meta.contains("playlist")) meta["playlist"] = "default";
+
+    return meta;
+}
+
+// Unix Socket Implementation (Preferred transport)
+UnixSocketLiquidsoapDriver::UnixSocketLiquidsoapDriver(const std::string& socket_path)
+    : socket_path_(socket_path) {}
+
+UnixSocketLiquidsoapDriver::~UnixSocketLiquidsoapDriver() {
+    disconnect();
+}
+
+void UnixSocketLiquidsoapDriver::apply_backoff_delay() {
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_connection_attempt_);
+
+    if (elapsed.count() >= backoff_ms_) {
+        backoff_ms_ = std::min(backoff_ms_ * 2, MAX_BACKOFF_MS);
+    }
+
+    last_connection_attempt_ = std::chrono::steady_clock::now();
+}
+
+std::error_code UnixSocketLiquidsoapDriver::connect() {
+    if (socket_fd_ != -1) return {};
+
+    apply_backoff_delay();
+
+    socket_fd_ = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (socket_fd_ < 0) {
+        return std::make_error_code(std::errc::io_error);
+    }
+
+    struct sockaddr_un serv_addr;
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sun_family = AF_UNIX;
+
+    if (socket_path_.length() >= sizeof(serv_addr.sun_path)) {
+        disconnect();
+        return std::make_error_code(std::errc::invalid_argument);
+    }
+
+    strncpy(serv_addr.sun_path, socket_path_.c_str(), sizeof(serv_addr.sun_path) - 1);
+
+    if (::connect(socket_fd_, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+        disconnect();
+        return std::make_error_code(std::errc::connection_refused);
+    }
+
+    backoff_ms_ = 100;
+    return {};
+}
+
+void UnixSocketLiquidsoapDriver::disconnect() {
+    if (socket_fd_ != -1) {
+        close(socket_fd_);
+        socket_fd_ = -1;
+    }
+}
+
+core::Result<std::string> UnixSocketLiquidsoapDriver::execute(const std::string& command) {
+    auto err = connect();
+    if (err) return err;
+
+    std::string full_cmd = command + "\r\n";
+    if (send(socket_fd_, full_cmd.c_str(), full_cmd.length(), MSG_NOSIGNAL) < 0) {
+        disconnect();
+        return std::make_error_code(std::errc::io_error);
+    }
+
+    const size_t MAX_RESPONSE_SIZE = 1024 * 1024;
+    std::string response;
+    char buffer[4096];
+    while (true) {
+        if (response.size() > MAX_RESPONSE_SIZE) {
+            disconnect();
+            return std::make_error_code(std::errc::message_size);
+        }
+
+        ssize_t n = recv(socket_fd_, buffer, sizeof(buffer) - 1, 0);
+        if (n <= 0) {
+            disconnect();
+            return std::make_error_code(std::errc::connection_aborted);
+        }
+        buffer[n] = '\0';
+        response += buffer;
+        if (response.find("END\r\n") != std::string::npos || response.find("END\n") != std::string::npos) {
+            break;
+        }
+    }
+
+    return response;
+}
+
+core::Result<nlohmann::json> UnixSocketLiquidsoapDriver::get_metadata() {
+    auto res = execute("request.on_air");
+    if (std::holds_alternative<std::error_code>(res)) return std::get<std::error_code>(res);
+
+    nlohmann::json meta = nlohmann::json::object();
+    std::string data = std::get<std::string>(res);
+
+    std::stringstream ss(data);
+    std::string line;
+    while (std::getline(ss, line)) {
+        if (line == "END" || line == "END\r") break;
+
+        size_t eq_pos = line.find('=');
+        if (eq_pos == std::string::npos) continue;
+
+        std::string key = line.substr(0, eq_pos);
+
+        if (eq_pos + 1 >= line.length() || line[eq_pos + 1] != '"') continue;
+
+        size_t val_start = eq_pos + 2;
+        size_t val_end = line.rfind('"');
+
+        if (val_end <= val_start) continue;
+
+        std::string val = line.substr(val_start, val_end - val_start);
+
+        if (!val.empty() && val.back() == '\r') val.pop_back();
+
+        if (key == "duration") {
+            try {
+                meta[key] = std::stod(val);
+            } catch (...) {
+                meta[key] = 0.0;
+            }
+        } else {
+            meta[key] = val;
+        }
+    }
+
     if (!meta.contains("title")) meta["title"] = "Unknown";
     if (!meta.contains("artist")) meta["artist"] = "Unknown";
     if (!meta.contains("duration") || !meta["duration"].is_number()) meta["duration"] = 0.0;

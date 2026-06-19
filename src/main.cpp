@@ -71,12 +71,25 @@ int main(int argc, char* argv[]) {
         if (debug_mode) {
             std::cout << "[Debug] Config loaded from: " << config_path << std::endl;
             std::cout << "[Debug] RabbitMQ: " << config.rabbitmq.host << ":" << config.rabbitmq.port << std::endl;
-            std::cout << "[Debug] Liquidsoap: " << config.liquidsoap.host << ":" << config.liquidsoap.port << std::endl;
+            if (config.liquidsoap.protocol == "socket") {
+                std::cout << "[Debug] Liquidsoap: " << config.liquidsoap.socket_path.value_or("(unset)") << " (socket)" << std::endl;
+            } else {
+                std::cout << "[Debug] Liquidsoap: " << config.liquidsoap.host << ":" << config.liquidsoap.port << " (telnet - deprecated)" << std::endl;
+            }
         }
 
         // 1. Infrastructure Setup (Drivers)
-        auto ls_driver = std::make_shared<smoothoperator::drivers::TelnetLiquidsoapDriver>(
-            config.liquidsoap.host, config.liquidsoap.port);
+        std::shared_ptr<smoothoperator::core::StreamProvider> ls_driver;
+        if (config.liquidsoap.protocol == "socket") {
+            if (!config.liquidsoap.socket_path.has_value()) {
+                throw std::runtime_error("Socket protocol selected but socket_path not configured");
+            }
+            ls_driver = std::make_shared<smoothoperator::drivers::UnixSocketLiquidsoapDriver>(
+                config.liquidsoap.socket_path.value());
+        } else {
+            ls_driver = std::make_shared<smoothoperator::drivers::TelnetLiquidsoapDriver>(
+                config.liquidsoap.host, config.liquidsoap.port);
+        }
 
         // Setup LibEv & AMQP
         struct ev_loop *main_loop = EV_DEFAULT;

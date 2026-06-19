@@ -37,9 +37,16 @@ void StateManager::poll() {
 }
 
 void StateManager::update_status() {
-    auto res = stream_provider_->execute(commands_.uptime);
-    std::string new_status = std::holds_alternative<std::string>(res) ? "playing" : "error";
-    
+    auto res = stream_provider_->execute(commands_.status);
+    if (!std::holds_alternative<std::string>(res)) {
+        state_.status = "error";
+        if (state_.status != "error") broadcast_state();
+        return;
+    }
+
+    std::string status_response = std::get<std::string>(res);
+    std::string new_status = (status_response.find("playing") != std::string::npos) ? "playing" : "stopped";
+
     if (new_status != state_.status) {
         state_.status = new_status;
         broadcast_state();
@@ -80,7 +87,7 @@ void StateManager::update_metadata() {
             return ss.str();
         }();
 
-        auto end_time = now + std::chrono::milliseconds(static_cast<long long>(state_.track.duration * 1000.0));
+        auto end_time = now + std::chrono::milliseconds(std::llround(state_.track.duration * 1000.0));
         auto tt = std::chrono::system_clock::to_time_t(end_time);
         struct tm tm_buf{};
         gmtime_r(&tt, &tm_buf);

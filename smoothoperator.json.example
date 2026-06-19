@@ -30,7 +30,7 @@
   },
   "commands": {
     "__comment_section": "Mapping of internal actions to Liquidsoap server commands",
-    "uptime": "server.uptime",
+    "status": "source.status",
     "skip": "source.skip",
     "playlist_reload": "playlist.reload",
     "playlist_set_uri": "playlist.set_uri",

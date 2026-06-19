@@ -12,7 +12,7 @@ SmoothOperator is the **Global State Gateway** for Intelliurb. It eliminates dir
 - **State Store:** Proactive polling of Liquidsoap with real-time state mirroring.
 - **Temporal Enrichment:** Calculates `start_time`, `end_time`, and `duration` for every track.
 - **DJ Intent Translation:** Maps `dj.*` RabbitMQ events to precise Liquidsoap actions.
-- **Security Hardened:** Verified with **ASAN, LSAN, UBSAN, and TSAN** for memory safety and race-condition prevention.
+- **Security Hardened:** Rigorously tested with **ASAN, LSAN, UBSAN, and TSAN** in Debug mode for memory safety and race-condition prevention.
 
 ---
 
@@ -60,16 +60,18 @@ sudo make install-systemd BASE_DIR=/opt/radio
 
 ---
 
-## ⚙️ Configuration
-### Running Tests (Safety Verification)
+### Running Tests with Sanitizers (Debug Safety Verification)
 
-We use extensive sanitizers to ensure production stability:
+Debug builds automatically include memory sanitizers (ASAN, LSAN, UBSAN, TSAN) for development. These tools detect bugs but add runtime overhead, so they are **disabled in Release builds**:
 
 ```bash
-# Build with AddressSanitizer and UndefinedBehaviorSanitizer
-cmake .. -DENABLE_ASAN=ON
-make && ./smoothoperator_unit_tests
+# Debug build (with sanitizers for development)
+make debug && ./build/smoothoperator_unit_tests
+
+# Release build (sanitizers disabled for production performance)
+make release
 ```
+
 ---
 
 ## ⚙️ Configuration

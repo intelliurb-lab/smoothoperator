@@ -128,13 +128,17 @@ AppConfig ConfigParser::load(const std::string& json_path, const std::string& en
         if (!l.contains("protocol")) throw std::runtime_error("Missing 'liquidsoap.protocol'");
         config.liquidsoap.protocol = l.at("protocol").get<std::string>();
         
-        if (config.liquidsoap.protocol == "telnet") {
+        if (config.liquidsoap.protocol == "socket") {
+            if (!l.contains("socket_path")) throw std::runtime_error("Missing 'liquidsoap.socket_path' for socket protocol");
+            config.liquidsoap.socket_path = l.at("socket_path").get<std::string>();
+        } else if (config.liquidsoap.protocol == "telnet") {
+            std::cerr << "[Config] WARNING: 'telnet' protocol is deprecated. Use 'socket' instead." << std::endl;
             if (!l.contains("host")) throw std::runtime_error("Missing 'liquidsoap.host' for telnet protocol");
             if (!l.contains("port")) throw std::runtime_error("Missing 'liquidsoap.port' for telnet protocol");
             config.liquidsoap.host = l.at("host").get<std::string>();
             config.liquidsoap.port = l.at("port").get<uint16_t>();
         } else {
-            throw std::runtime_error("Unsupported liquidsoap.protocol: '" + config.liquidsoap.protocol + "'. Only 'telnet' is currently implemented.");
+            throw std::runtime_error("Unsupported liquidsoap.protocol: '" + config.liquidsoap.protocol + "'. Use 'socket' (recommended) or 'telnet' (deprecated).");
         }
         
         if (l.contains("polling_interval_ms") && !l.at("polling_interval_ms").is_null()) {
@@ -147,7 +151,7 @@ AppConfig ConfigParser::load(const std::string& json_path, const std::string& en
         // Commands
         if (j.contains("commands") && j.at("commands").is_object()) {
             auto& c = j.at("commands");
-            if (c.contains("uptime") && !c.at("uptime").is_null()) config.commands.uptime = c.at("uptime").get<std::string>();
+            if (c.contains("status") && !c.at("status").is_null()) config.commands.status = c.at("status").get<std::string>();
             if (c.contains("skip") && !c.at("skip").is_null()) config.commands.skip = c.at("skip").get<std::string>();
             if (c.contains("playlist_reload") && !c.at("playlist_reload").is_null()) config.commands.playlist_reload = c.at("playlist_reload").get<std::string>();
             if (c.contains("playlist_set_uri") && !c.at("playlist_set_uri").is_null()) config.commands.playlist_set_uri = c.at("playlist_set_uri").get<std::string>();

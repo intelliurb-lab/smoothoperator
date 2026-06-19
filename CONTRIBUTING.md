@@ -31,6 +31,29 @@ make test
 - Use safe string functions
 - Validate input
 
+## Error Handling Convention
+
+Follow this pattern for consistency across modules:
+
+- **Core/Business Logic:** Use `std::variant<T, std::error_code>` for recoverable errors
+- **Configuration/Startup:** Throw `std::runtime_error` with descriptive messages
+- **Event Loop Callbacks:** Return void; log errors with `std::cerr`
+- **Input Validation:** Throw `std::invalid_argument` for malformed user input
+
+Example:
+```cpp
+// Good: Core module with variant result
+core::Result<std::string> execute(const std::string& cmd) {
+    if (cmd.empty()) return std::make_error_code(std::errc::invalid_argument);
+    // ...
+}
+
+// Good: Config startup with exceptions
+if (!config_path.exists()) {
+    throw std::runtime_error("Config file not found: " + config_path);
+}
+```
+
 ## Testing
 
 ```bash

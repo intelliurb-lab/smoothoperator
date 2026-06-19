@@ -91,7 +91,6 @@ target_link_libraries(smoothoperator
 
 # Installation
 install(TARGETS smoothoperator DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(FILES smoothoperator.conf.example DESTINATION ${SMOOTHOP_CONFIG_DIR})
 install(FILES smoothoperator.json.example DESTINATION ${SMOOTHOP_CONFIG_DIR})
 install(FILES smoothoperator.env.example DESTINATION ${SMOOTHOP_CONFIG_DIR})
 
