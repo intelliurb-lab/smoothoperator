@@ -47,7 +47,7 @@ void StateManager::update_status() {
     }
 
     std::string status_response = std::get<std::string>(res);
-    std::string new_status = (status_response.find("playing") != std::string::npos) ? "playing" : "stopped";
+    std::string new_status = is_playing_response(status_response) ? "playing" : "stopped";
 
     if (new_status != state_.status) {
         state_.status = new_status;

@@ -63,3 +63,14 @@ TEST_F(StateManagerTest, HandlesStatusRequest) {
     
     sm->handle_dj_command(intents.status_request, {});
 }
+
+TEST(StatusResponseTest, OnOrPlayingCountsAsPlaying) {
+    using smoothoperator::core::is_playing_response;
+    EXPECT_TRUE(is_playing_response("on"));
+    EXPECT_TRUE(is_playing_response("on\r\nEND\r\n"));
+    EXPECT_TRUE(is_playing_response("  on \n"));
+    EXPECT_TRUE(is_playing_response("source is playing"));
+    EXPECT_FALSE(is_playing_response("off\r\nEND\r\n"));
+    EXPECT_FALSE(is_playing_response("online"));
+    EXPECT_FALSE(is_playing_response(""));
+}
