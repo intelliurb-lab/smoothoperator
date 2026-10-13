@@ -1,4 +1,5 @@
 #include "smoothoperator/liquidsoap_driver.hpp"
+#include "smoothoperator/nowplaying_parser.hpp"
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <netinet/in.h>
@@ -105,56 +106,9 @@ core::Result<std::string> TelnetLiquidsoapDriver::execute(const std::string& com
 }
 
 core::Result<nlohmann::json> TelnetLiquidsoapDriver::get_metadata() {
-    auto res = execute("request.on_air");
+    auto res = execute("jax.nowplaying");
     if (std::holds_alternative<std::error_code>(res)) return std::get<std::error_code>(res);
-
-    nlohmann::json meta = nlohmann::json::object();
-    std::string data = std::get<std::string>(res);
-
-    // Robust line-based parser (handles key="value" format)
-    std::stringstream ss(data);
-    std::string line;
-    while (std::getline(ss, line)) {
-        if (line == "END" || line == "END\r") break;
-
-        // Look for pattern: key="value"
-        size_t eq_pos = line.find('=');
-        if (eq_pos == std::string::npos) continue;
-
-        std::string key = line.substr(0, eq_pos);
-
-        // Value starts after =" and ends at last "
-        if (eq_pos + 1 >= line.length() || line[eq_pos + 1] != '"') continue;
-
-        size_t val_start = eq_pos + 2;
-        size_t val_end = line.rfind('"');
-
-        if (val_end <= val_start) continue;
-
-        std::string val = line.substr(val_start, val_end - val_start);
-
-        // Remove trailing \r if present
-        if (!val.empty() && val.back() == '\r') val.pop_back();
-
-        // Convert numeric fields from string to proper types
-        if (key == "duration") {
-            try {
-                meta[key] = std::stod(val);
-            } catch (...) {
-                meta[key] = 0.0;
-            }
-        } else {
-            meta[key] = val;
-        }
-    }
-
-    // Ensure mandatory fields for core with correct types
-    if (!meta.contains("title")) meta["title"] = "Unknown";
-    if (!meta.contains("artist")) meta["artist"] = "Unknown";
-    if (!meta.contains("duration") || !meta["duration"].is_number()) meta["duration"] = 0.0;
-    if (!meta.contains("playlist")) meta["playlist"] = "default";
-
-    return meta;
+    return parse_nowplaying(std::get<std::string>(res));
 }
 
 // Unix Socket Implementation (Preferred transport)
@@ -248,50 +202,9 @@ core::Result<std::string> UnixSocketLiquidsoapDriver::execute(const std::string&
 }
 
 core::Result<nlohmann::json> UnixSocketLiquidsoapDriver::get_metadata() {
-    auto res = execute("request.on_air");
+    auto res = execute("jax.nowplaying");
     if (std::holds_alternative<std::error_code>(res)) return std::get<std::error_code>(res);
-
-    nlohmann::json meta = nlohmann::json::object();
-    std::string data = std::get<std::string>(res);
-
-    std::stringstream ss(data);
-    std::string line;
-    while (std::getline(ss, line)) {
-        if (line == "END" || line == "END\r") break;
-
-        size_t eq_pos = line.find('=');
-        if (eq_pos == std::string::npos) continue;
-
-        std::string key = line.substr(0, eq_pos);
-
-        if (eq_pos + 1 >= line.length() || line[eq_pos + 1] != '"') continue;
-
-        size_t val_start = eq_pos + 2;
-        size_t val_end = line.rfind('"');
-
-        if (val_end <= val_start) continue;
-
-        std::string val = line.substr(val_start, val_end - val_start);
-
-        if (!val.empty() && val.back() == '\r') val.pop_back();
-
-        if (key == "duration") {
-            try {
-                meta[key] = std::stod(val);
-            } catch (...) {
-                meta[key] = 0.0;
-            }
-        } else {
-            meta[key] = val;
-        }
-    }
-
-    if (!meta.contains("title")) meta["title"] = "Unknown";
-    if (!meta.contains("artist")) meta["artist"] = "Unknown";
-    if (!meta.contains("duration") || !meta["duration"].is_number()) meta["duration"] = 0.0;
-    if (!meta.contains("playlist")) meta["playlist"] = "default";
-
-    return meta;
+    return parse_nowplaying(std::get<std::string>(res));
 }
 
 } // namespace smoothoperator::drivers

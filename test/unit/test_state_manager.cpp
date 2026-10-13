@@ -47,7 +47,7 @@ TEST_F(StateManagerTest, EnrichesTemporalDataOnMetadataChange) {
     meta["duration"] = 100.0;
 
     EXPECT_CALL(*mock_ls, get_metadata()).WillOnce(Return(meta));
-    EXPECT_CALL(*mock_ls, execute("server.uptime")).WillOnce(Return(std::string("uptime: 100")));
+    EXPECT_CALL(*mock_ls, execute("source.status")).WillOnce(Return(std::string("playing")));
     EXPECT_CALL(*mock_bus, publish(test_routing_key, _)).Times(2);
 
     sm->poll();
@@ -62,4 +62,15 @@ TEST_F(StateManagerTest, HandlesStatusRequest) {
     EXPECT_CALL(*mock_bus, publish(test_routing_key, _)).Times(1);
     
     sm->handle_dj_command(intents.status_request, {});
+}
+
+TEST(StatusResponseTest, OnOrPlayingCountsAsPlaying) {
+    using smoothoperator::core::is_playing_response;
+    EXPECT_TRUE(is_playing_response("on"));
+    EXPECT_TRUE(is_playing_response("on\r\nEND\r\n"));
+    EXPECT_TRUE(is_playing_response("  on \n"));
+    EXPECT_TRUE(is_playing_response("source is playing"));
+    EXPECT_FALSE(is_playing_response("off\r\nEND\r\n"));
+    EXPECT_FALSE(is_playing_response("online"));
+    EXPECT_FALSE(is_playing_response(""));
 }
