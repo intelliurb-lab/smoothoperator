@@ -47,7 +47,7 @@ TEST_F(StateManagerTest, EnrichesTemporalDataOnMetadataChange) {
     meta["duration"] = 100.0;
 
     EXPECT_CALL(*mock_ls, get_metadata()).WillOnce(Return(meta));
-    EXPECT_CALL(*mock_ls, execute("server.uptime")).WillOnce(Return(std::string("uptime: 100")));
+    EXPECT_CALL(*mock_ls, execute("source.status")).WillOnce(Return(std::string("playing")));
     EXPECT_CALL(*mock_bus, publish(test_routing_key, _)).Times(2);
 
     sm->poll();

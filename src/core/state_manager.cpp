@@ -39,8 +39,10 @@ void StateManager::poll() {
 void StateManager::update_status() {
     auto res = stream_provider_->execute(commands_.status);
     if (!std::holds_alternative<std::string>(res)) {
-        state_.status = "error";
-        if (state_.status != "error") broadcast_state();
+        if (state_.status != "error") {
+            state_.status = "error";
+            broadcast_state();
+        }
         return;
     }
 
@@ -153,11 +155,16 @@ void StateManager::handle_dj_command(const std::string& intent, const nlohmann::
 }
 
 void StateManager::broadcast_state() {
-    event_bus_->publish(state_routing_key_, get_state_json());
+    event_bus_->publish(state_routing_key_, get_state_json_unlocked());
 }
 
 nlohmann::json StateManager::get_state_json() const {
     std::lock_guard<std::mutex> lock(state_mutex_);
+    return get_state_json_unlocked();
+}
+
+// Caller must hold state_mutex_.
+nlohmann::json StateManager::get_state_json_unlocked() const {
     nlohmann::json j;
     j["status"] = state_.status;
     j["track"]["artist"] = state_.track.artist;
