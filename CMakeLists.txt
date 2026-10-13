@@ -141,6 +141,7 @@ FetchContent_MakeAvailable(googletest)
 # Test Sources
 set(TEST_SOURCES
   test/unit/test_state_manager.cpp
+  test/unit/test_nowplaying_parser.cpp
 )
 
 add_executable(smoothoperator_unit_tests
